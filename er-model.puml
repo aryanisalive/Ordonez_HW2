@@ -1,0 +1,118 @@
+@startuml
+' ---------- Entities ----------
+class User {
+  +uuid id
+  +string fullName
+  +string email
+  +string phone
+  +datetime createdAt
+}
+
+class Driver {
+  +uuid id
+  +string fullName
+  +string email
+  +string phone
+  +string licenseNo
+  +datetime createdAt
+}
+
+class Ride {
+  +uuid id
+  +datetime rideTime
+  +string pickup
+  +string dropoff
+  +RideCategory category
+  +RideStatus status
+  +PaymentMethod paymentMethod
+  --
+  +int baseCents
+  +int taxCents
+  +int totalCents
+  +int commissionCents
+  +int driverTakeCents
+  --
+  +string notes
+  +datetime createdAt
+  --
+  FK userId : User.id
+  FK driverId : Driver.id
+}
+
+enum RideCategory {
+  Standard
+  XL
+  Executive
+}
+
+enum RideStatus {
+  Booked
+  PaidToDriver
+  Canceled
+}
+
+enum PaymentMethod {
+  Card
+  Cash
+  Wallet
+}
+
+class Payment {
+  +uuid id
+  +uuid rideId
+  +int amountCents
+  +PaymentStatus status
+  +PaymentMethod method
+  +datetime createdAt
+}
+
+enum PaymentStatus {
+  Authorized
+  Captured
+  Refunded
+  Failed
+}
+
+class DriverPayout {
+  +uuid id
+  +uuid driverId
+  +int amountCents
+  +datetime periodStart
+  +datetime periodEnd
+  +PayoutStatus status
+  +datetime createdAt
+}
+
+enum PayoutStatus {
+  Pending
+  Paid
+  Failed
+}
+
+class CommissionReport {
+  +uuid id
+  +datetime periodStart
+  +datetime periodEnd
+  +int ridesCount
+  +int commissionCents
+  +datetime createdAt
+}
+
+class Settings {
+  +uuid id
+  +decimal(5,2) taxRatePct
+  +decimal(5,2) commissionRatePct
+  +datetime effectiveFrom
+  +datetime createdAt
+}
+
+' ---------- Relationships ----------
+User "1" -- "0..*" Ride : books >
+Driver "1" -- "0..*" Ride : drives >
+Ride "1" -- "0..1" Payment : < paid_for
+
+Driver "1" -- "0..*" DriverPayout : < collects
+CommissionReport "1" o-- "0..*" Ride : aggregates >
+Settings "1" -- "0..*" Ride : rates_used (at booking)
+
+@enduml
