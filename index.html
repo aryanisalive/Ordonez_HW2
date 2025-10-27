@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ride Platform Starter</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Ride Platform</h1>
+    <nav class="tabs" role="tablist" aria-label="Main sections">
+      <button class="tab is-active" data-tab="booking" role="tab" aria-selected="true">Booking</button>
+      <button class="tab" data-tab="history" role="tab" aria-selected="false">Ride History</button>
+      <button class="tab" data-tab="finance" role="tab" aria-selected="false">Finance</button>
+      <button class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- BOOKING -->
+    <section id="booking" class="panel is-active" role="tabpanel" aria-labelledby="booking-tab">
+      <div class="card">
+        <h2>New Ride</h2>
+        <form id="bookingForm" class="grid" autocomplete="off">
+          <div class="field">
+            <label for="userName">User</label>
+            <input id="userName" name="userName" placeholder="e.g., Alice Johnson" required />
+          </div>
+
+          <div class="field">
+            <label for="driverName">Driver</label>
+            <input id="driverName" name="driverName" placeholder="e.g., Samir Patel" required />
+          </div>
+
+          <div class="field">
+            <label for="pickup">Pickup Location</label>
+            <input id="pickup" name="pickup" placeholder="e.g., 123 Main St" required />
+          </div>
+
+          <div class="field">
+            <label for="dropoff">Dropoff Location</label>
+            <input id="dropoff" name="dropoff" placeholder="e.g., 500 Market Ave" required />
+          </div>
+
+          <div class="field">
+            <label for="category">Category</label>
+            <select id="category" name="category" required>
+              <option value="">Select…</option>
+              <option value="Standard">Standard</option>
+              <option value="XL">XL</option>
+              <option value="Executive">Executive</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="paymentMethod">Payment</label>
+            <select id="paymentMethod" name="paymentMethod" required>
+              <option value="">Select…</option>
+              <option value="Card">Card</option>
+              <option value="Cash">Cash</option>
+              <option value="Wallet">Wallet</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="rideTime">Time</label>
+            <input id="rideTime" name="rideTime" type="datetime-local" required />
+          </div>
+
+          <div class="field">
+            <label for="basePrice">Base Price ($)</label>
+            <input id="basePrice" name="basePrice" type="number" min="0" step="0.01" placeholder="e.g., 18.50" required />
+          </div>
+
+          <div class="field">
+            <label for="notes">Notes <span class="hint">(optional)</span></label>
+            <input id="notes" name="notes" placeholder="e.g., airport pickup" />
+          </div>
+
+          <div class="summary">
+            <div class="summary-row">
+              <span>Tax (<span id="taxRateLabel"></span>):</span>
+              <strong id="taxAmount">$0.00</strong>
+            </div>
+            <div class="summary-row total">
+              <span>Total:</span>
+              <strong id="totalAmount">$0.00</strong>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn primary">Book Ride</button>
+            <button type="reset" class="btn ghost" id="resetBooking">Reset</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="history" class="panel" role="tabpanel" aria-labelledby="history-tab">
+      <div class="card">
+        <div class="row-split">
+          <h2>Ride History</h2>
+          <div class="filters">
+            <input id="filterUser" placeholder="Filter by user…" />
+            <input id="filterDriver" placeholder="Filter by driver…" />
+            <select id="filterCategory">
+              <option value="">All categories</option>
+              <option>Standard</option>
+              <option>XL</option>
+              <option>Executive</option>
+            </select>
+            <button id="clearFilters" class="btn ghost">Clear</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="ridesTable" class="table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Driver</th>
+                <th>From → To</th>
+                <th>Category</th>
+                <th>Payment</th>
+                <th>Base</th>
+                <th>Tax</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody><!-- rows injected --></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINANCE -->
+    <section id="finance" class="panel" role="tabpanel" aria-labelledby="finance-tab">
+      <div class="card">
+        <h2>Driver Payouts & Company Commission</h2>
+
+        <div class="grid-two">
+          <div>
+            <h3>Outstanding Driver Payouts</h3>
+            <div class="table-wrap">
+              <table id="payoutTable" class="table">
+                <thead>
+                  <tr>
+                    <th>Driver</th>
+                    <th>Unpaid Rides</th>
+                    <th>Amount Owed ($)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody><!-- injected --></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3>Company Commission</h3>
+            <div class="table-wrap">
+              <table id="commissionTable" class="table">
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th>Rides</th>
+                    <th>Commission ($)</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody><!-- injected --></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="row-split mt">
+          <div class="inline">
+            <label for="payoutDriver">Pay Driver</label>
+            <input id="payoutDriver" placeholder="Driver name…" />
+            <button id="btnPayDriver" class="btn">Pay Selected</button>
+          </div>
+
+          <div class="inline">
+            <label for="commissionPeriod">Run Commission</label>
+            <select id="commissionPeriod">
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="all">All time</option>
+            </select>
+            <button id="btnRunCommission" class="btn">Calculate</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="settings" class="panel" role="tabpanel" aria-labelledby="settings-tab">
+      <div class="card">
+        <h2>Settings</h2>
+        <form id="settingsForm" class="grid">
+          <div class="field">
+            <label for="taxRate">Tax Rate (%)</label>
+            <input id="taxRate" type="number" min="0" step="0.01" />
+          </div>
+          <div class="field">
+            <label for="commissionRate">Company Commission (%)</label>
+            <input id="commissionRate" type="number" min="0" step="0.01" />
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="submit">Save</button>
+            <button class="btn ghost" type="button" id="resetRates">Reset to Defaults</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <small>Starter template • Replace storage with real API calls when ready.</small>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
