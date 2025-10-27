@@ -1,3 +1,6 @@
+' - Check visual in https://www.planttext.com/  
+
+
 @startuml
 ' ---------- Entities ----------
 class User {
