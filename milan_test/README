@@ -1,0 +1,98 @@
+# Ride App Local Setup Guide
+
+**Ride App** locally using **Docker + PostgreSQL + Node.js**.
+
+---
+
+## Start a local PostgreSQL container
+
+In PowerShell:
+
+```powershell
+docker run --name ridepg -e POSTGRES_PASSWORD=1234 -p 5433:5432 -d postgres:16
+```
+
+> We use port **5433** to avoid conflicts with any existing local Postgres.
+
+---
+
+## Update your `.env`
+
+```
+PGUSER=postgres
+PGPASSWORD=1234
+PGHOST=127.0.0.1
+PGPORT=5433
+PGDATABASE=ride_app
+PORT=3000
+```
+
+---
+
+## Create the database
+
+```powershell
+docker exec -it ridepg psql -U postgres -c "CREATE DATABASE ride_app;"
+```
+
+---
+
+## Load the schema
+
+Make sure your `schema.sql` contains the **fixed PRICE table** (no generated→generated references).
+
+```powershell
+Get-Content .\schema.sql | docker exec -i ridepg psql -U postgres -d ride_app
+```
+
+---
+
+## Seed the database
+
+```powershell
+Get-Content .\seed.sql | docker exec -i ridepg psql -U postgres -d ride_app
+```
+
+You should see several `INSERT 0 1` messages and no errors.
+
+To confirm data:
+
+```powershell
+docker exec -it ridepg psql -U postgres -d ride_app -c "SELECT COUNT(*) FROM RIDE;"
+```
+
+Expected output:
+
+```
+ count
+-------
+     1
+(1 row)
+```
+
+---
+
+## Run the backend server
+
+Restart your Node.js app so it reads the new `.env`:
+
+```powershell
+node server.js
+```
+
+Then open [http://localhost:3000/api/health](http://localhost:3000/api/health)
+It should return:
+
+```json
+{"ok": true, "db": "connected", ...}
+```
+
+You can also check [http://localhost:3000/api/rides/demo](http://localhost:3000/api/rides/demo) to see sample ride data.
+
+## Verify everything
+
+1. Visit [http://localhost:3000/api/health](http://localhost:3000/api/health) — should return OK.
+2. Visit [http://localhost:3000/api/rides/demo](http://localhost:3000/api/rides/demo) — should return one JSON ride.
+3. Open your HTML page, click **Load**, and the table should populate.
+
+---
