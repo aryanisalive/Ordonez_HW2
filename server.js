@@ -5,28 +5,20 @@ npm i express pg dotenv
 */
 
 import express from "express";
-import dotenv from "dotenv";
-import pkg from "pg";
 import path from "path";
 
-dotenv.config();
-const { Pool } = pkg;
-const app = express();
-app.use(express.json());
-app.use(express.static("public"));
+import pool, { checkDatabaseConnection } from "./db/pool.js";
 
-const pool = new Pool({
-  user: process.env.PGUSER,
-  password: process.env.PGPASSWORD,
-  host: process.env.PGHOST,
-  port: process.env.PGPORT,
-  database: process.env.PGDATABASE,
-});
+const app = express();
+const publicDir = path.resolve(process.cwd(), "public");
+
+app.use(express.json());
+app.use(express.static(publicDir));
 
 app.get("/api/health", async (_req, res) => {
   try {
-    const { rows } = await pool.query("SELECT NOW() as time");
-    res.json({ ok: true, db: "connected", time: rows[0].time });
+    const time = await checkDatabaseConnection();
+    res.json({ ok: true, db: "connected", time });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -57,8 +49,8 @@ app.post("/api/users", async (req, res) => {
 });
 
 // fallback to index.html
-app.get("*", (req, res) => {
-  res.sendFile(path.resolve("public", "index.html"));
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
 });
 
 app.listen(process.env.PORT || 3000, () =>
