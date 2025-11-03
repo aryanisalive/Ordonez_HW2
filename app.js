@@ -16,10 +16,10 @@ const DEFAULT_RATES = {
 };
 
 const SIMULATION_POOL = {
-  users: ["Alice Johnson", "Bob Smith", "Charlie Brown", "Diana Prince", "Ethan Hunt"],
-  drivers: ["Samir Patel", "Maria Garcia", "David Chen", "Aisha Khan", "Leo Wong"],
-  pickups: ["123 Main St", "City Hall", "Airport Terminal A", "Central Park West", "Tech Campus Gate 3"],
-  dropoffs: ["500 Market Ave", "Train Station Platform 2", "The Museum District", "National Convention Center", "Ocean View Tower"],
+  users: ["Alice Johnson", "Bob Smith", "Charlie Brown", "Diana Prince", "Ethan Hunt", "Chase Williams", "Liam Brooks", "Jacob Jameson", "Fernando Martinez", "Jose Lopez"],
+  drivers: ["Samir Patel", "Maria Garcia", "David Chen", "Aisha Khan", "Leo Wong", "James Ferguson", "Bella Amelie", "William Matthews", "Kyle Thomas", "Joe Rodriguez"],
+  pickups: ["123 Main St", "City Hall", "Airport Terminal A", "Central Park West", "Tech Campus Gate 3", "100 South St", "400 Terrace Ln", "Joseph's Diner", "Museum of Natural Science", "West Bay Bank"],
+  dropoffs: ["500 Market Ave", "Martin Luther Blvd", "Boardwalk Ave", "Park Place St", "300 Towny Ln", "Johannes Zoo", "Train Station Platform 2", "The Museum District", "National Convention Center", "Ocean View Tower"],
   categories: ["Standard", "XL", "Executive"],
   payments: ["Card", "Cash", "Wallet"],
 };
