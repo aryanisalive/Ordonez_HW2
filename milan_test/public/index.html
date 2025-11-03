@@ -13,6 +13,7 @@
       <button class="tab is-active" data-tab="booking" role="tab" aria-selected="true">Booking</button>
       <button class="tab" data-tab="history" role="tab" aria-selected="false">Ride History</button>
       <button class="tab" data-tab="finance" role="tab" aria-selected="false">Finance</button>
+      <button class="tab" data-tab="bank" role="tab" aria-selected="false">Bank Accounts</button>
       <button class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
     </nav>
   </header>
@@ -66,7 +67,9 @@
 
           <div class="field">
             <label for="driverName">Driver</label>
-            <input id="driverName" name="driverName" placeholder="e.g., Samir Patel" required />
+              <select id="driverId" name="driverId" required>
+                <option value="">Select driver…</option>
+              </select>
           </div>
 
           <div class="field">
@@ -173,6 +176,22 @@
           </table>
         </div>
       </div>
+      <section class="panel">
+        <div class="card">
+          <h2>Users (DB)</h2>
+          <button id="loadUsers" class="btn">Load Users</button>
+          <div class="table-wrap">
+            <table class="table" id="usersTable">
+              <thead>
+                <tr><th>ID</th><th>Name</th><th>Email</th></tr>
+              </thead>
+              <tbody><!-- injected --></tbody>
+            </table>
+          </div>
+          <pre id="usersDebug" style="white-space:pre-wrap;color:#b00;"></pre>
+        </div>
+      </section>
+
     </section>
 
     <!-- FINANCE -->
@@ -236,6 +255,48 @@
         </div>
       </div>
     </section>
+
+    <!-- BANK ACCOUNT -->
+    <section id="bank" class="panel" role="tabpanel" aria-labelledby="bank-tab">
+      <div class="card">
+        <h2>Bank Accounts</h2>
+
+        <div class="row-split">
+          <div class="inline">
+            <label>View:</label>
+            <label><input type="radio" name="bankView" value="users" checked> Users</label>
+            <label><input type="radio" name="bankView" value="drivers"> Drivers</label>
+          </div>
+          <div class="inline">
+            <label for="bankEntitySelect">Select Name</label>
+            <select id="bankEntitySelect">
+              <option value="">— choose —</option>
+            </select>
+            <button id="bankLoad" class="btn">Load</button>
+            <button id="bankSeed" class="btn ghost">Seed Demo Data</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="bankTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email/Role</th>
+                <th>Account #</th>
+                <th>Currency</th>
+                <th>Status</th>
+                <th>Balance ($)</th>
+              </tr>
+            </thead>
+            <tbody><!-- injected --></tbody>
+          </table>
+        </div>
+
+        <pre id="bankDebug" style="white-space:pre-wrap;color:#b00;"></pre>
+      </div>
+    </section>
+
 
     <!-- SETTINGS -->
     <section id="settings" class="panel" role="tabpanel" aria-labelledby="settings-tab">

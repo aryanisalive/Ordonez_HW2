@@ -476,8 +476,285 @@ async function loadUsers() {
 }
 
 // button + auto-load on page open
-document.getElementById("loadUsers").addEventListener("click", loadUsers);
 document.addEventListener("DOMContentLoaded", loadUsers);
+
+function centsToUSD(c){ return (c/100).toFixed(2); }
+function setBankDebug(m){ const el=document.getElementById('bankDebug'); if(el) el.textContent = m || ''; }
+
+async function bankFetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function loadBankEntityOptions(view){
+  const url = view === 'drivers' ? '/api/bank/drivers' : '/api/bank/users';
+  const rows = await bankFetchJSON(url);
+
+  const map = new Map();
+  if(view === 'drivers'){
+    rows.forEach(r => { if(!map.has(r.driver_id)) map.set(r.driver_id, { id:r.driver_id, label:r.name, sub:r.email }); });
+  } else {
+    rows.forEach(r => { if(!map.has(r.user_id)) map.set(r.user_id, { id:r.user_id, label:r.name, sub:r.email }); });
+  }
+
+  const sel = document.getElementById('bankEntitySelect');
+  sel.innerHTML = '<option value="">— choose —</option>';
+  [...map.values()].sort((a,b)=>a.label.localeCompare(b.label)).forEach(o=>{
+    const opt = document.createElement('option');
+    opt.value = String(o.id);
+    opt.textContent = `${o.label}${o.sub ? ' ('+o.sub+')' : ''}`;
+    sel.appendChild(opt);
+  });
+}
+
+async function loadBankAccountsForSelection(){
+  setBankDebug('');
+  const view = document.querySelector('input[name="bankView"]:checked')?.value || 'users';
+  const id = document.getElementById('bankEntitySelect').value;
+  if(!id){ setBankDebug('Pick a name first.'); return; }
+  const url = view === 'drivers' ? `/api/bank/by-driver/${id}` : `/api/bank/by-user/${id}`;
+  const rows = await bankFetchJSON(url);
+
+  const tb = document.querySelector('#bankTable tbody');
+  tb.innerHTML = '';
+
+  if(rows.length === 0){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="6">No accounts found.</td>`;
+    tb.appendChild(tr);
+    return;
+  }
+
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const acct = r.account_id ? `${r.account_id} / ${r.bank_num}` : '-';
+    tr.innerHTML = `
+      <td>${r.name ?? '-'}</td>
+      <td>${(view==='drivers' ? 'Driver' : (r.email || '-'))}</td>
+      <td>${acct}</td>
+      <td>${r.currency || '-'}</td>
+      <td>${r.status || '-'}</td>
+      <td>${typeof r.balance_cents==='number' ? '$'+centsToUSD(r.balance_cents) : '-'}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+async function bankSeedDemo(){
+  const r = await fetch('/api/simulate/seed-basic', { method:'POST' });
+  if(!r.ok) throw new Error(await r.text());
+  const view = document.querySelector('input[name="bankView"]:checked')?.value || 'users';
+  await loadBankEntityOptions(view);
+  setBankDebug('Seed complete. Choose a name, then click Load.');
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const radios = document.querySelectorAll('input[name="bankView"]');
+  const loadBtn = document.getElementById('bankLoad');
+  const seedBtn = document.getElementById('bankSeed');
+
+  radios.forEach(r => r.addEventListener('change', ()=> {
+    loadBankEntityOptions(r.value).catch(e=>setBankDebug(String(e)));
+  }));
+  loadBankEntityOptions('users').catch(e=>setBankDebug(String(e)));
+
+  if(loadBtn) loadBtn.addEventListener('click', ()=> {
+    loadBankAccountsForSelection().catch(e=>setBankDebug(String(e)));
+  });
+  if(seedBtn) seedBtn.addEventListener('click', ()=> {
+    bankSeedDemo().catch(e=>setBankDebug(String(e)));
+  });
+});
+
+async function loadUsers(){
+  const debug = document.getElementById('usersDebug');
+  const tbody = document.querySelector('#usersTable tbody');
+  try {
+    if (!tbody) {
+      throw new Error('Missing #usersTable tbody in HTML');
+    }
+    const res = await fetch('/api/users');
+    if (!res.ok) throw new Error(await res.text());
+    const users = await res.json();
+
+    tbody.innerHTML = '';
+    users.forEach(u => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${u.user_id}</td>
+        <td>${u.name ?? '-'}</td>
+        <td>${u.email ?? '-'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    if (debug) debug.textContent = '';
+  } catch (e) {
+    console.error('Failed to load users:', e);
+    if (debug) debug.textContent = String(e.message || e);
+    alert('Failed to load users: ' + (e.message || e));
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('loadUsers');
+  if (btn) btn.addEventListener('click', loadUsers);
+});
+
+function cents(n){ return `$${(Number(n)/100).toFixed(2)}`; }
+
+// Populate driver dropdown
+async function populateDrivers() {
+  const sel = document.getElementById('driverId');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const r = await fetch('/api/drivers/all');
+    if (!r.ok) throw new Error(await r.text());
+    const drivers = await r.json();
+    sel.innerHTML = '<option value="">Select driver…</option>';
+    drivers.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = String(d.driver_id);
+      opt.textContent = d.booked ? `${d.name} (booked)` : d.name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error(e);
+    sel.innerHTML = '<option value="">(failed to load drivers)</option>';
+  }
+}
+
+// Submit booking to DB
+async function submitBooking(ev){
+  ev.preventDefault();
+  const form = ev.currentTarget;
+  const payload = {
+    userName: form.userName?.value?.trim(),
+    driverId: Number(document.getElementById('driverId')?.value || 0),
+    pickup: form.pickup?.value?.trim(),
+    dropoff: form.dropoff?.value?.trim(),
+    category: form.category?.value,
+    paymentMethod: form.paymentMethod?.value,
+    rideTime: form.rideTime?.value,
+    basePrice: Number(form.basePrice?.value || 0)
+  };
+  if (!payload.userName) return alert('Enter user name');
+  if (!payload.driverId) return alert('Select a driver');
+  if (!payload.pickup || !payload.dropoff) return alert('Pickup & dropoff required');
+  if (!payload.category) return alert('Select category');
+  if (!payload.paymentMethod) return alert('Select payment method');
+
+  try {
+    const res = await fetch('/api/book', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { ok, ride, error } = await res.json();
+    if (!ok) throw new Error(error||'Unknown booking error');
+    alert(
+      `Ride #${ride.ride_id} booked!\n`+
+      `Rider: ${ride.rider}\nDriver: ${ride.driver}\n`+
+      `From: ${ride.pickup}\nTo: ${ride.dropoff}\n`+
+      `Category: ${ride.category_name}\n`+
+      `Base: ${cents(ride.base_cents)}  Tax: ${cents(ride.tax_cents)}  Total: ${cents(ride.total_cents)}`
+    );
+    form.reset();
+    await populateDrivers(); // in case we mark drivers booked later
+    await refreshHistoryIfPresent();
+  } catch (e) {
+    console.error(e);
+    alert('Booking failed: ' + (e.message || e));
+  }
+}
+
+// Wire up on load
+window.addEventListener('DOMContentLoaded', () => {
+  populateDrivers().catch(console.error);
+  const bookingForm = document.getElementById('bookingForm');
+  if (bookingForm) bookingForm.addEventListener('submit', submitBooking);
+});
+
+function fmtMoneyCents(c){ return `$${((c||0)/100).toFixed(2)}`; }
+function el(id){ return document.getElementById(id); }
+
+async function fetchRides(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.user)     params.set('user', filters.user);
+  if (filters.driver)   params.set('driver', filters.driver);
+  if (filters.category) params.set('category', filters.category);
+  const res = await fetch(`/api/rides?${params.toString()}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function renderHistory(rows){
+  const tb = document.querySelector('#ridesTable tbody');
+  if (!tb) return;
+  tb.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.ts ? new Date(r.ts).toLocaleString() : '-'}</td>
+      <td>${r.rider || '-'}</td>
+      <td>${r.driver || '-'}</td>
+      <td>${(r.pickup||'-')} → ${(r.dropoff||'-')}</td>
+      <td>${r.category_name || '-'}</td>
+      <td>${(r.method || '-')}${r.payment_status ? ' / ' + r.payment_status : ''}</td>
+      <td>${fmtMoneyCents(r.base_cents)}</td>
+      <td>${fmtMoneyCents(r.tax_cents)}</td>
+      <td>${fmtMoneyCents(r.total_cents)}</td>
+      <td>${r.ride_status || '-'}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+async function loadHistoryFromFilters(){
+  const filters = {
+    user: el('filterUser')?.value?.trim() || '',
+    driver: el('filterDriver')?.value?.trim() || '',
+    category: el('filterCategory')?.value || ''
+  };
+  const rows = await fetchRides(filters);
+  renderHistory(rows);
+}
+
+function initHistoryUI(){
+  const fUser = el('filterUser');
+  const fDriver = el('filterDriver');
+  const fCat = el('filterCategory');
+  const clearBtn = el('clearFilters');
+
+  // Load on open / page load
+  loadHistoryFromFilters().catch(console.error);
+
+  // Live filter (debounced would be nice, but keep simple)
+  if (fUser)   fUser.addEventListener('input', () => loadHistoryFromFilters().catch(console.error));
+  if (fDriver) fDriver.addEventListener('input', () => loadHistoryFromFilters().catch(console.error));
+  if (fCat)    fCat.addEventListener('change',() => loadHistoryFromFilters().catch(console.error));
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (fUser) fUser.value = '';
+    if (fDriver) fDriver.value = '';
+    if (fCat) fCat.value = '';
+    loadHistoryFromFilters().catch(console.error);
+  });
+}
+
+// Call this after a successful booking so History refreshes
+async function refreshHistoryIfPresent(){
+  const table = document.querySelector('#ridesTable tbody');
+  if (table) {
+    await loadHistoryFromFilters().catch(console.error);
+  }
+}
+
+// Hook it up on DOM ready
+window.addEventListener('DOMContentLoaded', () => {
+  initHistoryUI();
+});
 
 /* ---------- Wire finance action handlers (after render) ---------- */
 $("#btnRunCommission")?.addEventListener("click", ()=>{}); // bound in renderCommissions
