@@ -15,6 +15,17 @@ const DEFAULT_RATES = {
   commissionRatePct: 20.0   // % taken by company (on base, pre-tax)
 };
 
+const SIMULATION_POOL = {
+  users: ["Alice Johnson", "Bob Smith", "Charlie Brown", "Diana Prince", "Ethan Hunt"],
+  drivers: ["Samir Patel", "Maria Garcia", "David Chen", "Aisha Khan", "Leo Wong"],
+  pickups: ["123 Main St", "City Hall", "Airport Terminal A", "Central Park West", "Tech Campus Gate 3"],
+  dropoffs: ["500 Market Ave", "Train Station Platform 2", "The Museum District", "National Convention Center", "Ocean View Tower"],
+  categories: ["Standard", "XL", "Executive"],
+  payments: ["Card", "Cash", "Wallet"],
+};
+
+const randomPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -29,6 +40,7 @@ const writeJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value
 const toCents = (n) => Math.round(Number(n) * 100);
 const fromCents = (c) => (c / 100);
 const money = (c) => `$${fromCents(c).toFixed(2)}`;
+const randomInt = (min, max) => Math.floor(Math.random() * (max - min+1)) + min;
 
 /* ---------- Rates ---------- */
 function loadRates(){
@@ -56,6 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSettings();
   initBooking();
   renderTables();
+  $("#clearHistory").addEventListener("click", clearAllRides);
 });
 
 /* ---------- Tabs ---------- */
@@ -125,7 +138,79 @@ function initBooking(){
   });
 
   $("#resetBooking").addEventListener("click", calcBookingSummary);
+  $("#simulateRide").addEventListener("click", runSimulation);
   calcBookingSummary();
+}
+
+function runSimulation() {
+  const numRides = prompt("Enter the number of rides to simulate (1-100):", "10");
+  if (numRides === null) return; // User cancelled
+
+  const N = Number(numRides);
+  if (isNaN(N) || N < 1 || N > 100) {
+    alert("Please enter a valid number between 1 and 100.");
+    return;
+  }
+
+  const newRides = [];
+  const tempPayouts = {};
+
+  // Load rates once outside the loop for efficiency
+  const { taxRatePct, commissionRatePct } = loadRates();
+
+  for (let i = 0; i < N; i++) {
+    // 1. Generate random ride data
+    const randomUser = randomPick(SIMULATION_POOL.users);
+    const randomDriver = randomPick(SIMULATION_POOL.drivers);
+    const randomPickup = randomPick(SIMULATION_POOL.pickups);
+    const randomDropoff = randomPick(SIMULATION_POOL.dropoffs);
+    const randomCategory = randomPick(SIMULATION_POOL.categories);
+    const randomPayment = randomPick(SIMULATION_POOL.payments);
+    const randomPrice = randomInt(10, 100);
+    const now = new Date();
+    const pastTime = new Date(now.getTime() - Math.random() * 7 * 24 * 60 * 60 * 1000);
+    const rideTimeISO = pastTime.toISOString();
+    const baseCents = toCents(randomPrice);
+    const taxCents = Math.round(baseCents * (taxRatePct / 100));
+    const totalCents = baseCents + taxCents;
+    const commissionCents = Math.round(baseCents * (commissionRatePct / 100));
+    const driverTakeCents = baseCents - commissionCents; // driver paid from base only
+
+    const rideData = {
+      id: cryptoRandomId(),
+      createdAt: rideTimeISO,
+      userName: randomUser,
+      driverName: randomDriver,
+      pickup: randomPickup,
+      dropoff: randomDropoff,
+      category: randomCategory,
+      paymentMethod: randomPayment,
+      baseCents, taxCents, totalCents, commissionCents, driverTakeCents,
+      notes: "Mass simulated ride.",
+      status: "Booked"
+    };
+
+    newRides.push(rideData);
+
+    const key = rideData.driverName.trim();
+    tempPayouts[key] = tempPayouts[key] || { owedCents: 0 };
+    tempPayouts[key].owedCents += rideData.driverTakeCents;
+  }
+
+  const existingRides = loadRides();
+  const existingPayouts = loadPayouts();
+
+  const finalRides = existingRides.concat(newRides);
+  saveRides(finalRides);
+
+  Object.entries(tempPayouts).forEach(([driverName, data]) => {
+    existingPayouts[driverName] = existingPayouts[driverName] || { owedCents: 0 };
+    existingPayouts[driverName].owedCents += data.owedCents;
+  });
+  savePayouts(existingPayouts);
+
+  renderTables();
+  alert("rides booked");
 }
 
 function getBookingData(){
@@ -215,6 +300,17 @@ function renderHistory(){
     $("#filterCategory").value = "";
     renderHistory();
   };
+}
+
+function clearAllRides() {
+  const isConfirmed = confirm("This will permenently delete all ride history data. Are you sure?");
+
+  if (isConfirmed) {
+    localStorage.removeItem(STORAGE_KEYS.rides);
+    localStorage.removeItem(STORAGE_KEYS.payouts);
+    localStorage.removeItem(STORAGE_KEYS.commissions);
+    renderTables();
+  }
 }
 
 function renderPayouts(){

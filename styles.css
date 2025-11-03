@@ -68,7 +68,14 @@ input:focus, select:focus{border-color:var(--accent)}
 .btn:hover{border-color:var(--accent)}
 .btn.primary{background:linear-gradient(90deg, var(--accent), var(--accent-2)); color:#081018; font-weight:700}
 .btn.ghost{background:transparent}
-.btn.danger{border-color:var(--danger); color:#ffd9d9}
+.btn.danger{
+  background: var(--danger); 
+  color: var(--text); 
+  border: 1px solid var(--danger); 
+}
+.btn.danger:hover{
+  border-color: #c75656;
+}
 
 .table-wrap{overflow:auto; border:1px solid var(--border); border-radius:12px}
 .table{width:100%; border-collapse:collapse; min-width:900px}
