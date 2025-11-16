@@ -1,0 +1,131 @@
+:root{
+  --bg: #0b0c10;
+  --card: #12141a;
+  --muted: #a3a9b7;
+  --text: #e8ecf1;
+  --accent: #6aa9ff;
+  --accent-2: #51d1b1;
+  --border: #232736;
+  --danger: #ff6b6b;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  color:var(--text);
+  background: radial-gradient(1200px 600px at 20% -10%, #172033 0%, transparent 60%), var(--bg);
+}
+
+.app-header, .app-footer{
+  max-width:1100px; margin:0 auto; padding:16px 20px;
+}
+.app-header h1{margin:0 0 8px;font-weight:700;letter-spacing:.3px}
+.tabs{display:flex; gap:8px; flex-wrap:wrap}
+.tab{
+  background:transparent; color:var(--muted); border:1px solid var(--border);
+  padding:8px 12px; border-radius:999px; cursor:pointer
+}
+.tab.is-active{color:var(--text); border-color:var(--accent)}
+main{max-width:1100px; margin:10px auto 60px; padding:0 20px}
+.panel{display:none}
+.panel.is-active{display:block}
+.card{
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border:1px solid var(--border); border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,0.25)
+}
+h2{margin:0 0 14px}
+h3{margin:12px 0}
+
+.grid{display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px}
+.grid-two{display:grid; grid-template-columns: 1fr 1fr; gap:16px}
+.row-split{display:flex; align-items:center; justify-content:space-between; gap:12px}
+.inline{display:flex; align-items:center; gap:8px}
+.mt{margin-top:16px}
+
+.field{display:flex; flex-direction:column; gap:6px}
+label{font-size:.92rem; color:var(--muted)}
+.hint{color:var(--muted); font-weight:400; font-size:.85em}
+input, select{
+  background:#0f1117; color:var(--text); border:1px solid var(--border);
+  padding:10px 12px; border-radius:10px; outline:none;
+}
+input:focus, select:focus{border-color:var(--accent)}
+
+.summary{
+  grid-column: 1 / -1;
+  margin-top:4px; padding:12px; border:1px dashed var(--border); border-radius:12px;
+  background: rgba(106,169,255,0.05)
+}
+.summary-row{display:flex; align-items:center; justify-content:space-between; margin:4px 0}
+.summary-row.total{font-size:1.1rem}
+
+.actions{grid-column:1/-1; display:flex; gap:10px; justify-content:flex-end}
+.btn{
+  border:1px solid var(--border);
+  background:#10131b; color:var(--text); padding:10px 14px; border-radius:12px; cursor:pointer
+}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:linear-gradient(90deg, var(--accent), var(--accent-2)); color:#081018; font-weight:700}
+.btn.ghost{background:transparent}
+.btn.danger{
+  background: var(--danger); 
+  color: var(--text); 
+  border: 1px solid var(--danger); 
+}
+.btn.danger:hover{
+  border-color: #c75656;
+}
+
+
+/* Admin layout, themed to match the app */
+.admin-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+
+.admin-browse .row,
+.admin-traces  .row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Use the shared muted color token everywhere */
+.muted { color: var(--muted); }
+
+/* Use existing .btn + .btn.danger styles from the theme; no custom button selector needed */
+
+/* Console matches the app’s card/border system */
+.console {
+  margin-top: 0.75rem;
+  max-height: 360px;
+  overflow: auto;
+  background: #0b1020;
+  color: #d1d5db;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.console pre { margin: 0 0 0.5rem 0; }
+.console pre.ok { color: #c8ffef; }
+.console pre.error { color: #ffc3c3; }
+
+.table-wrap{overflow:auto; border:1px solid var(--border); border-radius:12px}
+.table{width:100%; border-collapse:collapse; min-width:900px}
+th, td{padding:10px 12px; border-bottom:1px solid var(--border); text-align:left}
+thead th{position:sticky; top:0; background:#0e1016}
+
+.badge{
+  display:inline-block; padding:4px 8px; border-radius:999px; font-size:.8rem; border:1px solid var(--border);
+}
+.badge.success{background:rgba(81,209,177,.1); border-color:var(--accent-2); color:#c8ffef}
+.badge.pending{background:rgba(255,255,255,.04); color:var(--muted)}
+.badge.failed{background:rgba(255,107,107,.1); color:#ffc3c3}
+
+.app-footer{color:var(--muted)}
+@media (max-width: 800px){
+  .grid, .grid-two{grid-template-columns: 1fr}
+  .table{min-width:700px}
+}
+
+
+
