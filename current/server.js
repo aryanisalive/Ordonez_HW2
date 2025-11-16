@@ -18,7 +18,7 @@ pool.query = async function patchedQuery(...args) {
   // arg[0] can be text or { text, values }
   const sql = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].text) || '';
   try {
-    if (/^\s*select\b/i.test(sql)) {
+    if (/^\s*select\b/i.test(sql)) { 
       QUERY_TRACE.push(sql.trim() + ';');
     } else {
       TRANSACTION_TRACE.push(sql.trim() + ';');
@@ -48,6 +48,7 @@ const LOOKUP_SQL = fs.readFileSync("./seed.sql", "utf-8");
 adminRouter.post('/create-tables', async (req, res) => {
   try {
     if (!SCHEMA_SQL.trim()) return res.status(400).json({ ok: false, error: 'SCHEMA_SQL is empty. Fill it in.' });
+    // No need for locks on table creation
     await pool.query('BEGIN');
     await pool.query(SCHEMA_SQL);
     await pool.query('COMMIT');
@@ -298,10 +299,12 @@ app.post("/api/book", async (req, res) => {
     // 1) Ensure/Find USER (by name)
     let userId;
     {
+      // From what I can tell, this line checks to see if there are any users with a certain name
       const f = await client.query(`SELECT user_id FROM "USER" WHERE name = $1 LIMIT 1`, [userName]);
       if (f.rowCount) {
         userId = f.rows[0].user_id;
       } else {
+        // Well this is one way to do it Aryan
         const email = (userName || "user").toLowerCase().replace(/\s+/g, ".") + "@example.com";
         const ins = await client.query(
           `INSERT INTO "USER"(name,email) VALUES ($1,$2)
@@ -318,7 +321,7 @@ app.post("/api/book", async (req, res) => {
 
     // 2) Get category_id
     const catQ = await client.query(
-      `SELECT category_id FROM CATEGORY WHERE category_name=$1`, [category]
+      `SELECT category_id FROM CATEGORY WHERE category_name=$1 FOR UPDATE`, [category]
     );
     if (!catQ.rowCount) throw new Error(`Unknown category: ${category}`);
     const categoryId = catQ.rows[0].category_id;
@@ -331,7 +334,7 @@ app.post("/api/book", async (req, res) => {
     );
     let pickupId = pickQ.rows[0]?.place_id;
     if (!pickupId) {
-      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1`, [pickup]);
+      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1 FOR UPDATE`, [pickup]);
       pickupId = f.rows[0].place_id;
     }
 
@@ -342,7 +345,7 @@ app.post("/api/book", async (req, res) => {
     );
     let dropoffId = dropQ.rows[0]?.place_id;
     if (!dropoffId) {
-      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1`, [dropoff]);
+      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1 FOR UPDATE`, [dropoff]);
       dropoffId = f.rows[0].place_id;
     }
 
@@ -363,7 +366,7 @@ app.post("/api/book", async (req, res) => {
 
     // 5) PRICE (base from form, tax from APP_CONFIG) + compute tax/total now for downstream logic
     const baseCents = Math.round(Number(basePrice || 0) * 100);
-    const taxCfg = await client.query(`SELECT tax_rate FROM APP_CONFIG WHERE id IS TRUE`);
+    const taxCfg = await client.query(`SELECT tax_rate FROM APP_CONFIG WHERE id IS TRUE FOR UPDATE`);
     const taxRate = Number(taxCfg.rows[0]?.tax_rate ?? 8.25);
     const taxCents = Math.round(baseCents * (taxRate / 100));
     const totalCents = baseCents + taxCents;
@@ -381,7 +384,7 @@ app.post("/api/book", async (req, res) => {
       let accountId = null;
       if (method === "card") {
         const acc = await client.query(
-          `SELECT account_id FROM BANK_ACCOUNT WHERE user_id=$1 AND status='active' ORDER BY account_id LIMIT 1`,
+          `SELECT account_id FROM BANK_ACCOUNT WHERE user_id=$1 AND status='active' ORDER BY account_id LIMIT 1 FOR UPDATE`,
           [userId]
         );
         if (!acc.rowCount) {
@@ -390,7 +393,7 @@ app.post("/api/book", async (req, res) => {
         accountId = acc.rows[0].account_id;
       }
 
-      const amt = await client.query(`SELECT total_cents, base_cents FROM PRICE WHERE ride_id=$1`, [rideId]);
+      const amt = await client.query(`SELECT total_cents, base_cents FROM PRICE WHERE ride_id=$1 FOR UPDATE`, [rideId]);
       const amountCents = amt.rows[0].total_cents;
 
       // Insert payment as authorized first
@@ -405,7 +408,7 @@ app.post("/api/book", async (req, res) => {
       // If card, CAPTURE immediately and move funds between bank accounts
       if (method === 'card') {
         // Fetch config for company operating account & commission rate
-        const cfg = await client.query(`SELECT operating_account_id, commission_rate_pct FROM APP_CONFIG WHERE id IS TRUE`);
+        const cfg = await client.query(`SELECT operating_account_id, commission_rate_pct FROM APP_CONFIG WHERE id IS TRUE FOR UPDATE`);
         const operatingAccountId = cfg.rows[0]?.operating_account_id;
         if (!operatingAccountId) throw new Error("APP_CONFIG.operating_account_id is not set");
 
