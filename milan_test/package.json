@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "name": "current",
+  "description": "A full-stack PostgreSQL + Express + Vanilla JS project that demonstrates transactional logic, query analytics, and administrative operations for a ride-share platform.\r Built for the **HW-DBApp** assignment (Phases 1 & 2).",
+  "version": "1.0.0",
+  "main": "pool.js",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {}
+}
