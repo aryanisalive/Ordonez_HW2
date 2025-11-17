@@ -13,48 +13,14 @@
       <button class="tab is-active" data-tab="booking" role="tab" aria-selected="true">Booking</button>
       <button class="tab" data-tab="history" role="tab" aria-selected="false">Ride History</button>
       <button class="tab" data-tab="finance" role="tab" aria-selected="false">Finance</button>
-      <button class="tab" data-tab="bank" role="tab" aria-selected="false">Bank Accounts</button>
+      <button class="tab" data-tab="data" role="tab" aria-selected="false">Data</button>
       <button class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+      <!-- NEW -->
+      <button class="tab" data-tab="admin" role="tab" aria-selected="false">Admin</button>
     </nav>
   </header>
 
-  <section class="panel is-active">
-    <div class="card">
-      <h2>Recent Rides (Local DB)</h2>
-      <button id="btnLoadDemo" class="btn">Load</button>
-      <table class="table" id="demoTable">
-        <thead>
-          <tr><th>Time</th><th>Rider</th><th>Driver</th><th>From → To</th><th>Category</th><th>Base</th><th>Tax</th><th>Total</th><th>Payment</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-  <script>
-  document.getElementById("btnLoadDemo").onclick = async () => {
-    const r = await fetch("/api/rides/demo");
-    const rows = await r.json();
-    const tb = document.querySelector("#demoTable tbody");
-    tb.innerHTML = "";
-    rows.forEach(x => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${x.request_ts ? new Date(x.request_ts).toLocaleString() : '-'}</td>
-        <td>${x.rider || '-'}</td>
-        <td>${x.driver || '-'}</td>
-        <td>${x.pickup || '-'} → ${x.dropoff || '-'}</td>
-        <td>${x.category_name || '-'}</td>
-        <td>$${(x.base_cents/100).toFixed(2)}</td>
-        <td>$${(x.tax_cents/100).toFixed(2)}</td>
-        <td>$${(x.total_cents/100).toFixed(2)}</td>
-        <td>${x.method || '-'} / ${x.status || '-'}</td>`;
-      tb.appendChild(tr);
-    });
-  };
-  </script>
-
-
-
+  <main>
     <!-- BOOKING -->
     <section id="booking" class="panel is-active" role="tabpanel" aria-labelledby="booking-tab">
       <div class="card">
@@ -67,9 +33,7 @@
 
           <div class="field">
             <label for="driverName">Driver</label>
-              <select id="driverId" name="driverId" required>
-                <option value="">Select driver…</option>
-              </select>
+            <input id="driverName" name="driverName" placeholder="e.g., Samir Patel" required />
           </div>
 
           <div class="field">
@@ -176,22 +140,50 @@
           </table>
         </div>
       </div>
-      <section class="panel">
-        <div class="card">
-          <h2>Users (DB)</h2>
-          <button id="loadUsers" class="btn">Load Users</button>
-          <div class="table-wrap">
-            <table class="table" id="usersTable">
-              <thead>
-                <tr><th>ID</th><th>Name</th><th>Email</th></tr>
-              </thead>
-              <tbody><!-- injected --></tbody>
-            </table>
-          </div>
-          <pre id="usersDebug" style="white-space:pre-wrap;color:#b00;"></pre>
-        </div>
-      </section>
+    </section>
 
+        <!-- --- ADMIN --- -->
+    <section id="admin" class="panel" role="tabpanel" aria-labelledby="admin-tab">
+      <div class="card">
+        <h2>Admin</h2>
+        <p class="muted">Create/init tables, browse a few rows, truncate data, and download SQL traces.</p>
+
+        <div class="admin-grid">
+          <div class="admin-actions inline">
+            <button id="btn-create-tables" class="btn">Create Tables</button>
+            <button id="btn-init-lookups" class="btn">Initialize Lookups</button>
+
+            <label class="inline">
+              <input class="muted" type="checkbox" id="admin-only-nonlookup" checked />
+              Truncate only non-lookup tables
+            </label>
+
+            <button id="btn-truncate" class="btn danger">Delete Rows (Danger)</button>
+          </div>
+
+          <div class="admin-browse">
+            <div class="row">
+              <label for="admin-table">Browse table</label>
+              <select id="admin-table">
+                <option value="">Select a table…</option>
+              </select>
+              <label for="admin-limit">Limit</label>
+              <input id="admin-limit" type="number" min="1" max="100" value="10" />
+              <button id="btn-browse" class="btn">Browse 10</button>
+            </div>
+          </div>
+
+          <div class="admin-traces">
+            <div class="row">
+              <button id="btn-dl-transaction" class="btn">Download transaction.sql</button>
+              <button id="btn-dl-query" class="btn">Download query.sql</button>
+              <button id="btn-clear-traces" class="btn ghost">Clear traces</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-output" class="console"></div>
+      </div>
     </section>
 
     <!-- FINANCE -->
@@ -254,49 +246,155 @@
           </div>
         </div>
       </div>
-    </section>
-
-    <!-- BANK ACCOUNT -->
-    <section id="bank" class="panel" role="tabpanel" aria-labelledby="bank-tab">
-      <div class="card">
-        <h2>Bank Accounts</h2>
-
-        <div class="row-split">
-          <div class="inline">
-            <label>View:</label>
-            <label><input type="radio" name="bankView" value="users" checked> Users</label>
-            <label><input type="radio" name="bankView" value="drivers"> Drivers</label>
+    
+        <hr class="mt" />
+        <h3>Reports (server)</h3>
+        <div class="grid-two">
+          <div>
+            <div class="inline">
+              <label>Commission by Day &amp; Category</label>
+              <input id="r1Start" type="date" />
+              <input id="r1End" type="date" />
+              <button id="btnReportCommission" class="btn">Run</button>
+            </div>
+            <div class="table-wrap">
+              <table id="tblReportCommission" class="table">
+                <thead>
+                  <tr>
+                    <th>Day</th><th>Category</th><th>Rides</th><th>Base</th><th>Commission</th><th>Tax</th><th>Total</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
-          <div class="inline">
-            <label for="bankEntitySelect">Select Name</label>
-            <select id="bankEntitySelect">
-              <option value="">— choose —</option>
-            </select>
-            <button id="bankLoad" class="btn">Load</button>
-            <button id="bankSeed" class="btn ghost">Seed Demo Data</button>
+          <div>
+            <div class="inline">
+              <label>Rides per Driver per Day</label>
+              <input id="r2Start" type="date" />
+              <input id="r2End" type="date" />
+              <button id="btnReportRidesPerDriver" class="btn">Run</button>
+            </div>
+            <div class="table-wrap">
+              <table id="tblReportRidesPerDriver" class="table">
+                <thead>
+                  <tr>
+                    <th>Day</th><th>Driver</th><th>Rides</th><th>Gross</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
+        <div class="mt">
+          <div class="inline">
+            <label>Outstanding Payouts</label>
+            <input id="r3Start" type="date" />
+            <input id="r3End" type="date" />
+            <button id="btnReportOutstanding" class="btn">Run</button>
+          </div>
+          <div class="table-wrap">
+            <table id="tblReportOutstanding" class="table">
+              <thead>
+                <tr>
+                  <th>Driver</th><th>Rides</th><th>Owed</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+    </section>
+
+    <!-- Data -->
+    <section id="data" class="panel" role="tabpanel" aria-labelledby="data-tab">
+      <div class="card">
+        <h2>Server Data Overview</h2>
+        <p class="muted">
+          This tab shows users (riders), drivers, and their bank accounts as stored in PostgreSQL.
+        </p>
+
+        <div class="actions">
+          <button id="btnLoadData" class="btn">Load Data from Server</button>
+        </div>
+
+        <!-- USERS-->
+        <h3>Users (Riders)</h3>
         <div class="table-wrap">
-          <table class="table" id="bankTable">
+          <table id="tblUsers" class="table">
             <thead>
               <tr>
+                <th>user_id</th>
                 <th>Name</th>
-                <th>Email/Role</th>
-                <th>Account #</th>
-                <th>Currency</th>
-                <th>Status</th>
-                <th>Balance ($)</th>
+                <th>Email</th>
+                <th>Phone</th>
               </tr>
             </thead>
-            <tbody><!-- injected --></tbody>
+            <tbody><!-- filled by JS--></tbody>
           </table>
         </div>
 
-        <pre id="bankDebug" style="white-space:pre-wrap;color:#b00;"></pre>
+        <!-- DRIVERS-->
+        <h3>Drivers</h3>
+        <div class="table-wrap">
+          <table id="tblDrivers" class="table">
+            <thead>
+              <tr>
+                <th>driver_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Booked?</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
+
+        <!-- USER BANK -->
+        <h3>User Bank Accs</h3>
+        <div class="table-wrap">
+          <table id="tblUserBank" class="table">
+            <thead>
+              <tr>
+                <th>user_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>account_id</th>
+                <th>Bank #</th>
+                <th>Currency</th>
+                <th>Status</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
+
+
+        <!-- Driver BANK -->
+        <h3>Driver Bank Accs</h3>
+        <div class="table-wrap">
+          <table id="tblDriverBank" class="table">
+            <thead>
+              <tr>
+                <th>driver_id</th>
+                <th>user_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>account_id</th>
+                <th>Bank #</th>
+                <th>Currency</th>
+                <th>Status</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
       </div>
     </section>
-
 
     <!-- SETTINGS -->
     <section id="settings" class="panel" role="tabpanel" aria-labelledby="settings-tab">

@@ -1,8 +1,11 @@
 /* ------------------------------
- * Simple Ride Platform Starter
+ * Simple Ride Platform (Merged)
+ * - Front-end local demo (from app.js)
+ * - Backend-triggered sim + server reports (from app_new.js)
  * Storage: localStorage (replace with real API)
  * ------------------------------ */
 
+// ==== Constants & Defaults ====
 const STORAGE_KEYS = {
   rides: "rides_v1",
   rates: "rates_v1",
@@ -24,25 +27,25 @@ const SIMULATION_POOL = {
   payments: ["Card", "Cash", "Wallet"],
 };
 
+// ==== Small Helpers ====
 const randomPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-/* ---------- Storage helpers ---------- */
+// Storage helpers
 const readJSON = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
   catch { return fallback; }
 };
 const writeJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value));
 
-/* ---------- Money helpers ---------- */
+// Money & number helpers
 const toCents = (n) => Math.round(Number(n) * 100);
 const fromCents = (c) => (c / 100);
 const money = (c) => `$${fromCents(c).toFixed(2)}`;
-const randomInt = (min, max) => Math.floor(Math.random() * (max - min+1)) + min;
+const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-/* ---------- Rates ---------- */
+// ==== Rates ====
 function loadRates(){
   const saved = readJSON(STORAGE_KEYS.rates, null);
   return saved ? saved : { ...DEFAULT_RATES };
@@ -51,27 +54,34 @@ function saveRates(rates){
   writeJSON(STORAGE_KEYS.rates, rates);
 }
 
-/* ---------- Rides ---------- */
+// ==== Rides ====
 function loadRides(){ return readJSON(STORAGE_KEYS.rides, []); }
 function saveRides(rides){ writeJSON(STORAGE_KEYS.rides, rides); }
 
-/* ---------- Payouts & Commissions ---------- */
+// ==== Payouts & Commissions ====
 function loadPayouts(){ return readJSON(STORAGE_KEYS.payouts, {}); }
 function savePayouts(p){ writeJSON(STORAGE_KEYS.payouts, p); }
 
 function loadCommissions(){ return readJSON(STORAGE_KEYS.commissions, []); }
 function saveCommissions(cs){ writeJSON(STORAGE_KEYS.commissions, cs); }
 
-/* ---------- UI Init ---------- */
+// ==== UI Init ====
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   initSettings();
   initBooking();
   renderTables();
-  $("#clearHistory").addEventListener("click", clearAllRides);
+
+  // Clear history button (if present)
+  $("#clearHistory") && $("#clearHistory").addEventListener("click", clearAllRides);
+
+  const btnData = document.getElementById("btnLoadData");
+  if (btnData){
+    btnData.addEventListener("click", loadServerData);
+  }
 });
 
-/* ---------- Tabs ---------- */
+// ==== Tabs ====
 function initTabs(){
   const tabs = $$(".tab");
   tabs.forEach(btn => {
@@ -80,68 +90,146 @@ function initTabs(){
       $$(".panel").forEach(p => p.classList.remove("is-active"));
       btn.classList.add("is-active");
       const id = btn.dataset.tab;
-      $("#" + id).classList.add("is-active");
+      $("#" + id)?.classList.add("is-active");
     });
   });
 }
 
-/* ---------- Settings ---------- */
+// ==== Settings ====
 function initSettings(){
   const rates = loadRates();
-  $("#taxRate").value = rates.taxRatePct;
-  $("#commissionRate").value = rates.commissionRatePct;
-  $("#taxRateLabel").textContent = `${rates.taxRatePct}%`;
+  $("#taxRate") && ($("#taxRate").value = rates.taxRatePct);
+  $("#commissionRate") && ($("#commissionRate").value = rates.commissionRatePct);
+  $("#taxRateLabel") && ( $("#taxRateLabel").textContent = `${rates.taxRatePct}%` );
 
-  $("#settingsForm").addEventListener("submit", (e) => {
+  $("#settingsForm")?.addEventListener("submit", (e) => {
     e.preventDefault();
-    const taxRatePct = Number($("#taxRate").value || DEFAULT_RATES.taxRatePct);
-    const commissionRatePct = Number($("#commissionRate").value || DEFAULT_RATES.commissionRatePct);
+    const taxRatePct = Number($("#taxRate")?.value || DEFAULT_RATES.taxRatePct);
+    const commissionRatePct = Number($("#commissionRate")?.value || DEFAULT_RATES.commissionRatePct);
     saveRates({ taxRatePct, commissionRatePct });
-    $("#taxRateLabel").textContent = `${taxRatePct}%`;
+    $("#taxRateLabel") && ( $("#taxRateLabel").textContent = `${taxRatePct}%` );
     calcBookingSummary(); // reflect changes
     alert("Settings saved.");
   });
 
-  $("#resetRates").addEventListener("click", () => {
+  $("#resetRates")?.addEventListener("click", () => {
     saveRates({ ...DEFAULT_RATES });
-    $("#taxRate").value = DEFAULT_RATES.taxRatePct;
-    $("#commissionRate").value = DEFAULT_RATES.commissionRatePct;
-    $("#taxRateLabel").textContent = `${DEFAULT_RATES.taxRatePct}%`;
+    $("#taxRate") && ($("#taxRate").value = DEFAULT_RATES.taxRatePct);
+    $("#commissionRate") && ($("#commissionRate").value = DEFAULT_RATES.commissionRatePct);
+    $("#taxRateLabel") && ( $("#taxRateLabel").textContent = `${DEFAULT_RATES.taxRatePct}%` );
     calcBookingSummary();
   });
 }
 
-/* ---------- Booking ---------- */
+// ==== Booking ====
 function initBooking(){
   const form = $("#bookingForm");
+  if (!form) return;
+
   form.addEventListener("input", calcBookingSummary);
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = getBookingData();
     if(!data) return;
 
-    const rides = loadRides();
-    rides.push(data);
-    saveRides(rides);
+    try {
+      const driverId = await findDriverIdByName(data.driverName);
 
-    // Update driver payouts ledger (unpaid until explicitly paid)
-    const payouts = loadPayouts();
-    const key = data.driverName.trim();
-    payouts[key] = payouts[key] || { owedCents: 0 };
-    payouts[key].owedCents += data.driverTakeCents;
-    savePayouts(payouts);
+      const payload = {
+        userName: data.userName,
+        driverId: driverId,
+        pickup: data.pickup,
+        dropoff: data.dropoff,
+        category: data.category,
+        paymentMethod: data.paymentMethod,
+        rideTime: data.createdAt,
+        basePrice: (data.baseCents / 100)
+      };
 
-    form.reset();
-    calcBookingSummary();
-    renderTables();
-    alert("Ride booked.");
+      const tStart = performance.now();
+      const res = await fetch("/api/book", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const tEnd = performance.now();
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Server error: ${res.status} ${errText}`);
+      }
+
+      const json = await res.json();
+      if (!json.ok) {
+        throw new Error(json.error || "Unknown booking error");
+      }
+
+      const duration = typeof json.duration_ms === "number"
+        ? json.duration_ms
+        : (tEnd - tStart);
+      
+      const rides = loadRides();
+      rides.push({
+        ...data,
+        status: "Booked(Server)"
+      });
+      saveRides(rides);
+
+      // Update driver payouts ledger (unpaid until explicitly paid)
+      const payouts = loadPayouts();
+      const key = data.driverName.trim();
+      payouts[key] = payouts[key] || { owedCents: 0 };
+      payouts[key].owedCents += data.driverTakeCents;
+      savePayouts(payouts);
+
+      form.reset();
+      calcBookingSummary();
+      renderTables();
+      alert(`Ride booked successfully. \nServer transaction time: ${duration.toFixed(2)} ms`);
+    } catch(err){
+      console.error(err);
+      alert("Failed to book ride on server: " + err.message);
+    }
   });
 
-  $("#resetBooking").addEventListener("click", calcBookingSummary);
-  $("#simulateRide").addEventListener("click", runSimulation);
+  $("#resetBooking")?.addEventListener("click", calcBookingSummary);
+
+  // --- Simulation buttons ---
+  // Support either separate buttons or one unified button.
+  if ($("#simulateLocal")) {
+    $("#simulateLocal").addEventListener("click", runSimulation);
+  }
+  if ($("#simulateServer")) {
+    $("#simulateServer").addEventListener("click", runServerSimulation);
+  }
+  // Backward-compat: single button #simulateRide prompts user which mode to use.
+  if ($("#simulateRide")) {
+    $("#simulateRide").addEventListener("click", () => {
+      const choice = prompt("Simulation mode: type 'local' for browser-only or 'server' for backend-simulated rides.", "server");
+      if (choice && choice.toLowerCase().startsWith("l")) runSimulation();
+      else if (choice && choice.toLowerCase().startsWith("s")) runServerSimulation();
+    });
+  }
+
   calcBookingSummary();
 }
 
+async function findDriverIdByName(name) {
+  const res = await fetch("/api/drivers/all")
+  if (!res.ok) throw new Error("Failed to load drivers from server");
+  const drivers = await res.json();
+  const lower = name.trim().toLowerCase();
+  const match = drivers.find(d => {
+    const n1 = (d.name || "").toLowerCase();
+    const n2 = (d.driver_name || "").toLowerCase();
+    return n1 === lower || n2 === lower;
+  });
+  if (!match){
+    throw new Error(`No driver found with name "${name}". Make sure it matches the seeded driver name.`);
+  }
+  return match.driver_id;
+}
+// Local-only simulation (from original app.js)
 function runSimulation() {
   const numRides = prompt("Enter the number of rides to simulate (1-100):", "10");
   if (numRides === null) return; // User cancelled
@@ -210,18 +298,18 @@ function runSimulation() {
   savePayouts(existingPayouts);
 
   renderTables();
-  alert("rides booked");
+  alert("rides booked (local)");
 }
 
 function getBookingData(){
-  const userName = $("#userName").value.trim();
-  const driverName = $("#driverName").value.trim();
-  const pickup = $("#pickup").value.trim();
-  const dropoff = $("#dropoff").value.trim();
-  const category = $("#category").value;
-  const paymentMethod = $("#paymentMethod").value;
-  const rideTime = $("#rideTime").value;
-  const basePrice = Number($("#basePrice").value);
+  const userName = $("#userName")?.value.trim();
+  const driverName = $("#driverName")?.value.trim();
+  const pickup = $("#pickup")?.value.trim();
+  const dropoff = $("#dropoff")?.value.trim();
+  const category = $("#category")?.value;
+  const paymentMethod = $("#paymentMethod")?.value;
+  const rideTime = $("#rideTime")?.value;
+  const basePrice = Number($("#basePrice")?.value);
 
   if(!userName || !driverName || !pickup || !dropoff || !category || !paymentMethod || !rideTime || isNaN(basePrice)){
     alert("Please complete all required fields.");
@@ -240,21 +328,21 @@ function getBookingData(){
     createdAt: new Date(rideTime).toISOString(),
     userName, driverName, pickup, dropoff, category, paymentMethod,
     baseCents, taxCents, totalCents, commissionCents, driverTakeCents,
-    notes: $("#notes").value.trim(),
+    notes: $("#notes")?.value.trim() || "",
     status: "Booked" // could evolve to Completed/Canceled
   };
 }
 
 function calcBookingSummary(){
-  const basePrice = Number($("#basePrice").value || 0);
+  const basePrice = Number($("#basePrice")?.value || 0);
   const { taxRatePct } = loadRates();
   const tax = basePrice * (taxRatePct / 100);
-  $("#taxRateLabel").textContent = `${taxRatePct}%`;
-  $("#taxAmount").textContent = `$${tax.toFixed(2)}`;
-  $("#totalAmount").textContent = `$${(basePrice + tax).toFixed(2)}`;
+  $("#taxRateLabel") && ( $("#taxRateLabel").textContent = `${taxRatePct}%` );
+  $("#taxAmount") && ( $("#taxAmount").textContent = `$${tax.toFixed(2)}` );
+  $("#totalAmount") && ( $("#totalAmount").textContent = `$${(basePrice + tax).toFixed(2)}` );
 }
 
-/* ---------- Render tables ---------- */
+// ==== Render tables ====
 function renderTables(){
   renderHistory();
   renderPayouts();
@@ -264,11 +352,12 @@ function renderTables(){
 function renderHistory(){
   const rides = loadRides().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   const tbody = $("#ridesTable tbody");
+  if (!tbody) return;
   tbody.innerHTML = "";
 
-  const fUser = $("#filterUser").value?.toLowerCase() || "";
-  const fDriver = $("#filterDriver").value?.toLowerCase() || "";
-  const fCat = $("#filterCategory").value || "";
+  const fUser = ($("#filterUser")?.value || "").toLowerCase();
+  const fDriver = ($("#filterDriver")?.value || "").toLowerCase();
+  const fCat = $("#filterCategory")?.value || "";
 
   rides
     .filter(r => (!fUser || r.userName.toLowerCase().includes(fUser)))
@@ -291,20 +380,19 @@ function renderHistory(){
       tbody.appendChild(tr);
     });
 
-  $("#filterUser").oninput = renderHistory;
-  $("#filterDriver").oninput = renderHistory;
-  $("#filterCategory").onchange = renderHistory;
-  $("#clearFilters").onclick = () => {
-    $("#filterUser").value = "";
-    $("#filterDriver").value = "";
-    $("#filterCategory").value = "";
+  $("#filterUser") && ($("#filterUser").oninput = renderHistory);
+  $("#filterDriver") && ($("#filterDriver").oninput = renderHistory);
+  $("#filterCategory") && ($("#filterCategory").onchange = renderHistory);
+  $("#clearFilters") && ($("#clearFilters").onclick = () => {
+    if ($("#filterUser")) $("#filterUser").value = "";
+    if ($("#filterDriver")) $("#filterDriver").value = "";
+    if ($("#filterCategory")) $("#filterCategory").value = "";
     renderHistory();
-  };
+  });
 }
 
 function clearAllRides() {
-  const isConfirmed = confirm("This will permenently delete all ride history data. Are you sure?");
-
+  const isConfirmed = confirm("This will permanently delete all ride history data. Are you sure?");
   if (isConfirmed) {
     localStorage.removeItem(STORAGE_KEYS.rides);
     localStorage.removeItem(STORAGE_KEYS.payouts);
@@ -316,6 +404,7 @@ function clearAllRides() {
 function renderPayouts(){
   const payouts = loadPayouts();
   const tbody = $("#payoutTable tbody");
+  if (!tbody) return;
   tbody.innerHTML = "";
 
   Object.entries(payouts).forEach(([driver, obj]) => {
@@ -337,16 +426,17 @@ function renderPayouts(){
     });
   });
 
-  $("#btnPayDriver").onclick = () => {
-    const name = $("#payoutDriver").value.trim();
+  $("#btnPayDriver") && ($("#btnPayDriver").onclick = () => {
+    const name = $("#payoutDriver")?.value.trim();
     if(!name) return alert("Enter a driver name.");
     payDriver(name);
-  };
+  });
 }
 
 function renderCommissions(){
   const rows = loadCommissions().slice(-20).reverse(); // latest 20
   const tbody = $("#commissionTable tbody");
+  if (!tbody) return;
   tbody.innerHTML = "";
   rows.forEach(r => {
     const tr = document.createElement("tr");
@@ -359,8 +449,8 @@ function renderCommissions(){
     tbody.appendChild(tr);
   });
 
-  $("#btnRunCommission").onclick = () => {
-    const period = $("#commissionPeriod").value;
+  $("#btnRunCommission") && ($("#btnRunCommission").onclick = () => {
+    const period = $("#commissionPeriod")?.value;
     const res = calculateCommission(period);
     if(res.rides === 0){ alert("No rides in selected period."); return; }
     const all = loadCommissions();
@@ -368,10 +458,10 @@ function renderCommissions(){
     saveCommissions(all);
     renderCommissions();
     alert(`Commission for ${res.periodKey}: ${money(res.amountCents)} across ${res.rides} ride(s).`);
-  };
+  });
 }
 
-/* ---------- Actions (mock backend) ---------- */
+// ==== Actions (mock backend) ====
 function payDriver(driverName){
   const payouts = loadPayouts();
   const owed = payouts[driverName]?.owedCents || 0;
@@ -421,7 +511,7 @@ function calculateCommission(period){
   };
 }
 
-/* ---------- Utilities ---------- */
+// ==== Utilities ====
 function formatDateTime(iso){
   const d = new Date(iso);
   return d.toLocaleString(undefined, { year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" });
@@ -439,7 +529,7 @@ function badge(status){
   return `<span class="${cls}">${status}</span>`;
 }
 function escapeHTML(s){
-  return s.replace(/[&<>"']/g, (m)=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[m]));
+  return (s ?? "").toString().replace(/[&<>"']/g, (m)=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[m]));
 }
 function cryptoRandomId(){
   // short random id
@@ -452,309 +542,376 @@ function countUnpaidRidesForDriver(driver){
   return rides.filter(r => r.driverName === driver && r.status === "Booked").length;
 }
 
-
-async function loadUsers() {
-  try {
-    const res = await fetch("/api/users");
-    if (!res.ok) throw new Error(await res.text());
-    const users = await res.json();
-
-    const tbody = document.querySelector("#userTable tbody");
-    tbody.innerHTML = "";
-    users.forEach(u => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${u.user_id}</td>
-        <td>${u.name}</td>
-        <td>${u.email}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  } catch (err) {
-    alert("Failed to load users: " + err.message);
-  }
-}
-
-// button + auto-load on page open
-document.addEventListener("DOMContentLoaded", loadUsers);
-
-function centsToUSD(c){ return (c/100).toFixed(2); }
-function setBankDebug(m){ const el=document.getElementById('bankDebug'); if(el) el.textContent = m || ''; }
-
-async function bankFetchJSON(url){
+// ---- Server-side report wiring & helpers (from app_new.js) ----
+function q$(sel){ return document.querySelector(sel); }
+async function fetchJSON(url){
   const r = await fetch(url);
-  if(!r.ok) throw new Error(await r.text());
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
-
-async function loadBankEntityOptions(view){
-  const url = view === 'drivers' ? '/api/bank/drivers' : '/api/bank/users';
-  const rows = await bankFetchJSON(url);
-
-  const map = new Map();
-  if(view === 'drivers'){
-    rows.forEach(r => { if(!map.has(r.driver_id)) map.set(r.driver_id, { id:r.driver_id, label:r.name, sub:r.email }); });
-  } else {
-    rows.forEach(r => { if(!map.has(r.user_id)) map.set(r.user_id, { id:r.user_id, label:r.name, sub:r.email }); });
-  }
-
-  const sel = document.getElementById('bankEntitySelect');
-  sel.innerHTML = '<option value="">— choose —</option>';
-  [...map.values()].sort((a,b)=>a.label.localeCompare(b.label)).forEach(o=>{
-    const opt = document.createElement('option');
-    opt.value = String(o.id);
-    opt.textContent = `${o.label}${o.sub ? ' ('+o.sub+')' : ''}`;
-    sel.appendChild(opt);
-  });
+function qsDates(startSel, endSel){
+  const sEl = q$(startSel), eEl = q$(endSel);
+  const qs = new URLSearchParams();
+  if (sEl && sEl.value) qs.set("start", sEl.value);
+  if (eEl && eEl.value) qs.set("end", eEl.value);
+  const str = qs.toString();
+  return str ? `?${str}` : "";
+}
+function setRows(tbodySel, rowsHtml){
+  const el = q$(`${tbodySel} tbody`) || q$(tbodySel);
+  if (el) el.innerHTML = rowsHtml || "";
 }
 
-async function loadBankAccountsForSelection(){
-  setBankDebug('');
-  const view = document.querySelector('input[name="bankView"]:checked')?.value || 'users';
-  const id = document.getElementById('bankEntitySelect').value;
-  if(!id){ setBankDebug('Pick a name first.'); return; }
-  const url = view === 'drivers' ? `/api/bank/by-driver/${id}` : `/api/bank/by-user/${id}`;
-  const rows = await bankFetchJSON(url);
+// Reuse global money() and escapeHTML()
 
-  const tb = document.querySelector('#bankTable tbody');
-  tb.innerHTML = '';
-
-  if(rows.length === 0){
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="6">No accounts found.</td>`;
-    tb.appendChild(tr);
-    return;
-  }
-
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    const acct = r.account_id ? `${r.account_id} / ${r.bank_num}` : '-';
-    tr.innerHTML = `
-      <td>${r.name ?? '-'}</td>
-      <td>${(view==='drivers' ? 'Driver' : (r.email || '-'))}</td>
-      <td>${acct}</td>
-      <td>${r.currency || '-'}</td>
-      <td>${r.status || '-'}</td>
-      <td>${typeof r.balance_cents==='number' ? '$'+centsToUSD(r.balance_cents) : '-'}</td>
-    `;
-    tb.appendChild(tr);
-  });
+async function runReportCommission(){
+  try{
+    const rows = await fetchJSON(`/api/reports/commission-by-day-category${qsDates("#r1Start","#r1End")}`);
+    const html = rows.map(r => `
+      <tr>
+        <td>${escapeHTML(r.day)}</td>
+        <td>${escapeHTML(r.category_name)}</td>
+        <td>${r.rides}</td>
+        <td>${money(r.base_cents)}</td>
+        <td>${money(r.commission_cents)}</td>
+        <td>${money(r.tax_cents)}</td>
+        <td>${money(r.total_cents)}</td>
+      </tr>
+    `).join("");
+    setRows("#tblReportCommission", html);
+  } catch(e){ alert(`Failed to load report: ${e.message}`); }
 }
 
-async function bankSeedDemo(){
-  const r = await fetch('/api/simulate/seed-basic', { method:'POST' });
-  if(!r.ok) throw new Error(await r.text());
-  const view = document.querySelector('input[name="bankView"]:checked')?.value || 'users';
-  await loadBankEntityOptions(view);
-  setBankDebug('Seed complete. Choose a name, then click Load.');
+async function runReportRidesPerDriver(){
+  try{
+    const rows = await fetchJSON(`/api/reports/rides-per-driver-per-day${qsDates("#r2Start","#r2End")}`);
+    const html = rows.map(r => `
+      <tr>
+        <td>${escapeHTML(r.day)}</td>
+        <td>${escapeHTML(r.driver)}</td>
+        <td>${r.rides}</td>
+        <td>${money(r.gross_cents)}</td>
+      </tr>
+    `).join("");
+    setRows("#tblReportRidesPerDriver", html);
+  } catch(e){ alert(`Failed to load report: ${e.message}`); }
 }
 
-window.addEventListener('DOMContentLoaded', ()=>{
-  const radios = document.querySelectorAll('input[name="bankView"]');
-  const loadBtn = document.getElementById('bankLoad');
-  const seedBtn = document.getElementById('bankSeed');
-
-  radios.forEach(r => r.addEventListener('change', ()=> {
-    loadBankEntityOptions(r.value).catch(e=>setBankDebug(String(e)));
-  }));
-  loadBankEntityOptions('users').catch(e=>setBankDebug(String(e)));
-
-  if(loadBtn) loadBtn.addEventListener('click', ()=> {
-    loadBankAccountsForSelection().catch(e=>setBankDebug(String(e)));
-  });
-  if(seedBtn) seedBtn.addEventListener('click', ()=> {
-    bankSeedDemo().catch(e=>setBankDebug(String(e)));
-  });
-});
-
-async function loadUsers(){
-  const debug = document.getElementById('usersDebug');
-  const tbody = document.querySelector('#usersTable tbody');
-  try {
-    if (!tbody) {
-      throw new Error('Missing #usersTable tbody in HTML');
-    }
-    const res = await fetch('/api/users');
-    if (!res.ok) throw new Error(await res.text());
-    const users = await res.json();
-
-    tbody.innerHTML = '';
-    users.forEach(u => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${u.user_id}</td>
-        <td>${u.name ?? '-'}</td>
-        <td>${u.email ?? '-'}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-    if (debug) debug.textContent = '';
-  } catch (e) {
-    console.error('Failed to load users:', e);
-    if (debug) debug.textContent = String(e.message || e);
-    alert('Failed to load users: ' + (e.message || e));
-  }
+async function runReportOutstanding(){
+  try{
+    const rows = await fetchJSON(`/api/reports/outstanding-payouts${qsDates("#r3Start","#r3End")}`);
+    const html = rows.map(r => `
+      <tr>
+        <td>${escapeHTML(r.driver)}</td>
+        <td>${r.rides}</td>
+        <td>${money(r.owed_cents)}</td>
+      </tr>
+    `).join("");
+    setRows("#tblReportOutstanding", html);
+  } catch(e){ alert(`Failed to load report: ${e.message}`); }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('loadUsers');
-  if (btn) btn.addEventListener('click', loadUsers);
-});
+async function adminFetch(url, options = {}) {
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
 
-function cents(n){ return `$${(Number(n)/100).toFixed(2)}`; }
-
-// Populate driver dropdown
-async function populateDrivers() {
-  const sel = document.getElementById('driverId');
+// Populate table dropdown on load / when Admin tab is opened
+async function loadAdminTables() {
+  const sel = document.getElementById('admin-table');
   if (!sel) return;
   sel.innerHTML = '<option value="">Loading…</option>';
   try {
-    const r = await fetch('/api/drivers/all');
-    if (!r.ok) throw new Error(await r.text());
-    const drivers = await r.json();
-    sel.innerHTML = '<option value="">Select driver…</option>';
-    drivers.forEach(d => {
+    const data = await adminFetch('/api/admin/tables');
+    sel.innerHTML = '<option value="">Select a table…</option>';
+    (data.tables || []).forEach(t => {
       const opt = document.createElement('option');
-      opt.value = String(d.driver_id);
-      opt.textContent = d.booked ? `${d.name} (booked)` : d.name;
+      opt.value = t; opt.textContent = t;
       sel.appendChild(opt);
     });
   } catch (e) {
-    console.error(e);
-    sel.innerHTML = '<option value="">(failed to load drivers)</option>';
+    sel.innerHTML = `<option value="">(Failed to load tables)</option>`;
+    adminPrint(e.message, true);
   }
 }
 
-// Submit booking to DB
-async function submitBooking(ev){
-  ev.preventDefault();
-  const form = ev.currentTarget;
-  const payload = {
-    userName: form.userName?.value?.trim(),
-    driverId: Number(document.getElementById('driverId')?.value || 0),
-    pickup: form.pickup?.value?.trim(),
-    dropoff: form.dropoff?.value?.trim(),
-    category: form.category?.value,
-    paymentMethod: form.paymentMethod?.value,
-    rideTime: form.rideTime?.value,
-    basePrice: Number(form.basePrice?.value || 0)
-  };
-  if (!payload.userName) return alert('Enter user name');
-  if (!payload.driverId) return alert('Select a driver');
-  if (!payload.pickup || !payload.dropoff) return alert('Pickup & dropoff required');
-  if (!payload.category) return alert('Select category');
-  if (!payload.paymentMethod) return alert('Select payment method');
+function adminPrint(msg, isError = false) {
+  const out = document.getElementById('admin-output');
+  if (!out) return;
+  const pre = document.createElement('pre');
+  pre.textContent = (typeof msg === 'string') ? msg : JSON.stringify(msg, null, 2);
+  pre.className = isError ? 'error' : 'ok';
+  out.prepend(pre);
+}
 
+async function onCreateTables() {
   try {
-    const res = await fetch('/api/book', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const { ok, ride, error } = await res.json();
-    if (!ok) throw new Error(error||'Unknown booking error');
-    alert(
-      `Ride #${ride.ride_id} booked!\n`+
-      `Rider: ${ride.rider}\nDriver: ${ride.driver}\n`+
-      `From: ${ride.pickup}\nTo: ${ride.dropoff}\n`+
-      `Category: ${ride.category_name}\n`+
-      `Base: ${cents(ride.base_cents)}  Tax: ${cents(ride.tax_cents)}  Total: ${cents(ride.total_cents)}`
-    );
-    form.reset();
-    await populateDrivers(); // in case we mark drivers booked later
-    await refreshHistoryIfPresent();
+    const data = await adminFetch('/api/admin/create-tables', { method: 'POST', body: JSON.stringify({}) });
+    adminPrint(data);
+    await loadAdminTables();
   } catch (e) {
-    console.error(e);
-    alert('Booking failed: ' + (e.message || e));
+    adminPrint(e.message, true);
   }
 }
 
-// Wire up on load
-window.addEventListener('DOMContentLoaded', () => {
-  populateDrivers().catch(console.error);
-  const bookingForm = document.getElementById('bookingForm');
-  if (bookingForm) bookingForm.addEventListener('submit', submitBooking);
-});
-
-function fmtMoneyCents(c){ return `$${((c||0)/100).toFixed(2)}`; }
-function el(id){ return document.getElementById(id); }
-
-async function fetchRides(filters = {}) {
-  const params = new URLSearchParams();
-  if (filters.user)     params.set('user', filters.user);
-  if (filters.driver)   params.set('driver', filters.driver);
-  if (filters.category) params.set('category', filters.category);
-  const res = await fetch(`/api/rides?${params.toString()}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+async function onInitLookups() {
+  try {
+    const data = await adminFetch('/api/admin/init-lookups', { method: 'POST', body: JSON.stringify({}) });
+    adminPrint(data);
+  } catch (e) {
+    adminPrint(e.message, true);
+  }
 }
 
-function renderHistory(rows){
-  const tb = document.querySelector('#ridesTable tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
+async function onTruncate() {
+  const onlyNonLookup = document.getElementById('admin-only-nonlookup')?.checked ?? true;
+  try {
+    const data = await adminFetch('/api/admin/truncate', { method: 'POST', body: JSON.stringify({ onlyNonLookup }) });
+    adminPrint(data);
+  } catch (e) {
+    adminPrint(e.message, true);
+  }
+}
+
+async function onBrowse() {
+  const table = document.getElementById('admin-table')?.value || '';
+  const limit = document.getElementById('admin-limit')?.value || '10';
+  if (!table) return adminPrint('Pick a table first.', true);
+  try {
+    const data = await adminFetch(`/api/admin/browse?table=${encodeURIComponent(table)}&limit=${encodeURIComponent(limit)}`);
+    adminPrint(data);
+  } catch (e) {
+    adminPrint(e.message, true);
+  }
+}
+
+function onDownloadTrace(type) {
+  if (type !== 'transaction' && type !== 'query') return;
+  window.location.href = `/api/admin/download/${type}.sql`;
+}
+
+async function onClearTraces() {
+  try {
+    const data = await adminFetch('/api/admin/clear-traces', { method: 'POST', body: JSON.stringify({}) });
+    adminPrint(data);
+  } catch (e) {
+    adminPrint(e.message, true);
+  }
+}
+
+async function loadServerData() {
+  try {
+    const [users, drivers, userBank,driverBank] = await Promise.all([
+      fetchJSON("/api/users"),
+      fetchJSON("/api/drivers/all"),
+      fetchJSON("/api/bank/users"),
+      fetchJSON("/api/bank/drivers"),
+    ]);
+    renderUserTable(users);
+    renderDriversTable(drivers);
+    renderUserBankTable(userBank);
+    renderDriverBankTable(driverBank);
+  } catch(err) {
+    console.error(err);
+    alert("Failed to load server data: " + err.message);
+  }
+}
+
+function renderUserTable(users){
+  const tbody = document.querySelector("#tblUsers tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  users.forEach(u => {
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.ts ? new Date(r.ts).toLocaleString() : '-'}</td>
-      <td>${r.rider || '-'}</td>
-      <td>${r.driver || '-'}</td>
-      <td>${(r.pickup||'-')} → ${(r.dropoff||'-')}</td>
-      <td>${r.category_name || '-'}</td>
-      <td>${(r.method || '-')}${r.payment_status ? ' / ' + r.payment_status : ''}</td>
-      <td>${fmtMoneyCents(r.base_cents)}</td>
-      <td>${fmtMoneyCents(r.tax_cents)}</td>
-      <td>${fmtMoneyCents(r.total_cents)}</td>
-      <td>${r.ride_status || '-'}</td>
+      <td>${u.user_id}</td>
+      <td>${escapeHTML(u.name || "")}</td>
+      <td>${escapeHTML(u.email || "")}</td>
+      <td>${escapeHTML(u.phone || "")}</td>
     `;
-    tb.appendChild(tr);
+    tbody.appendChild(tr);
   });
 }
 
-async function loadHistoryFromFilters(){
-  const filters = {
-    user: el('filterUser')?.value?.trim() || '',
-    driver: el('filterDriver')?.value?.trim() || '',
-    category: el('filterCategory')?.value || ''
-  };
-  const rows = await fetchRides(filters);
-  renderHistory(rows);
-}
+function renderDriversTable(drivers){
+  const tbody = document.querySelector("#tblDrivers tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
 
-function initHistoryUI(){
-  const fUser = el('filterUser');
-  const fDriver = el('filterDriver');
-  const fCat = el('filterCategory');
-  const clearBtn = el('clearFilters');
-
-  // Load on open / page load
-  loadHistoryFromFilters().catch(console.error);
-
-  // Live filter (debounced would be nice, but keep simple)
-  if (fUser)   fUser.addEventListener('input', () => loadHistoryFromFilters().catch(console.error));
-  if (fDriver) fDriver.addEventListener('input', () => loadHistoryFromFilters().catch(console.error));
-  if (fCat)    fCat.addEventListener('change',() => loadHistoryFromFilters().catch(console.error));
-  if (clearBtn) clearBtn.addEventListener('click', () => {
-    if (fUser) fUser.value = '';
-    if (fDriver) fDriver.value = '';
-    if (fCat) fCat.value = '';
-    loadHistoryFromFilters().catch(console.error);
+  drivers.forEach(d => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${d.driver_id}</td>
+      <td>${escapeHTML(d.driver_name || d.name || "")}</td>
+      <td>${escapeHTML(d.driver_email || d.email || "")}</td>
+      <td>${escapeHTML(d.booked ? "Yes" : "No")}</td>
+    `;
+    tbody.appendChild(tr);
   });
 }
 
-// Call this after a successful booking so History refreshes
-async function refreshHistoryIfPresent(){
-  const table = document.querySelector('#ridesTable tbody');
-  if (table) {
-    await loadHistoryFromFilters().catch(console.error);
-  }
+function renderUserBankTable(rows){
+  const tbody = document.querySelector("#tblUserBank tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.user_id}</td>
+      <td>${escapeHTML(r.name || "")}</td>
+      <td>${escapeHTML(r.email || "")}</td>
+      <td>${r.account_id ?? ""}</td>
+      <td>${escapeHTML(r.bank_num || "")}</td>
+      <td>${escapeHTML(r.currency || "")}</td>
+      <td>${escapeHTML(r.status || "")}</td>
+      <td>$${((r.balance_cents || 0) / 100).toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
-// Hook it up on DOM ready
-window.addEventListener('DOMContentLoaded', () => {
-  initHistoryUI();
+function renderDriverBankTable(rows){
+  const tbody = document.querySelector("#tblDriverBank tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.driver_id}</td>
+      <td>${r.user_id}</td>
+      <td>${escapeHTML(r.name || "")}</td>
+      <td>${escapeHTML(r.email || "")}</td>
+      <td>${r.account_id ?? ""}</td>
+      <td>${escapeHTML(r.bank_num || "")}</td>
+      <td>${escapeHTML(r.currency || "")}</td>
+      <td>${escapeHTML(r.status || "")}</td>
+      <td>$${((r.balance_cents || 0) / 100).toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+
+// --- Hook up events once the DOM is ready ---
+document.addEventListener('DOMContentLoaded', () => {
+  // If you show Admin by default or behind a tab, call loadAdminTables() when visible.
+  loadAdminTables();
+
+  document.getElementById('btn-create-tables')?.addEventListener('click', onCreateTables);
+  document.getElementById('btn-init-lookups')?.addEventListener('click', onInitLookups);
+  document.getElementById('btn-truncate')?.addEventListener('click', onTruncate);
+  document.getElementById('btn-browse')?.addEventListener('click', onBrowse);
+  document.getElementById('btn-dl-transaction')?.addEventListener('click', () => onDownloadTrace('transaction'));
+  document.getElementById('btn-dl-query')?.addEventListener('click', () => onDownloadTrace('query'));
+  document.getElementById('btn-clear-traces')?.addEventListener('click', onClearTraces);
 });
 
-/* ---------- Wire finance action handlers (after render) ---------- */
-$("#btnRunCommission")?.addEventListener("click", ()=>{}); // bound in renderCommissions
+
+// Attach listeners once DOM is ready
+(function(){
+  if (document.readyState !== "loading") ready(); else document.addEventListener("DOMContentLoaded", ready);
+  function ready(){
+    q$("#btnReportCommission") && q$("#btnReportCommission").addEventListener("click", runReportCommission);
+    q$("#btnReportRidesPerDriver") && q$("#btnReportRidesPerDriver").addEventListener("click", runReportRidesPerDriver);
+    q$("#btnReportOutstanding") && q$("#btnReportOutstanding").addEventListener("click", runReportOutstanding);
+  }
+})();
+
+/* ==== Server-backed Simulation (hits /api/book) ==== */
+async function runServerSimulation(){
+  try{
+    const numRides = prompt("Enter number of rides to simulate on the server (1-50):", "10");
+    if (numRides === null) return;
+    const N = Number(numRides);
+    if (isNaN(N) || N < 1 || N > 50) { alert("Please enter a number between 1 and 50."); return; }
+
+    // Fetch available drivers
+    const drvRes = await fetch("/api/drivers/available");
+    if(!drvRes.ok){ alert("Failed to load drivers"); return; }
+    const drivers = await drvRes.json();
+    if(!Array.isArray(drivers) || drivers.length === 0){
+      alert("No available drivers found. Please add drivers or mark some as available.");
+      return;
+    }
+
+    // Static pools (server-mode: no PII-ish names)
+    const categories = ["Standard","XL","Executive"];
+    const streets = [
+      "100 Main St", "200 Oak Ave", "15 Market St", "22 Pine Rd", "301 Cedar Blvd",
+      "950 Lakeview Dr", "77 Sunset Way", "1200 River Rd", "18 Maple Ln", "45 Broadway"
+    ];
+    const cities = ["Springfield","Hill Valley","Sunnydale","River City","Fairview"];
+    function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+    function randomAddress(){ return `${rand(streets)}, ${rand(cities)}`; }
+    function randomName(){ return `User ${Math.floor(100000 + Math.random()*900000)}`; }
+    function randomBase(){ return (8 + Math.random()*32).toFixed(2); } // $8 - $40
+    function randomTime(){
+      const now = new Date();
+      const deltaMin = Math.floor(Math.random() * 7 * 24 * 60); // past 7 days
+      const t = new Date(now.getTime() - deltaMin*60000);
+      return new Date(t.getTime() + Math.floor(Math.random()*60)*60000).toISOString(); // slight jitter
+    }
+
+    let ok = 0, fail = 0;
+    const durations = [];
+
+    for (let i=0;i<N;i++){
+      const d = rand(drivers);
+      const payload = {
+        userName: randomName(),
+        driverId: d.driver_id,
+        pickup: randomAddress(),
+        dropoff: randomAddress(),
+        category: rand(categories),
+        paymentMethod: "Cash", // avoids needing a saved card/bank account
+        rideTime: randomTime(),
+        basePrice: randomBase()
+      };
+      
+      const tStart = performance.now()
+      try{
+        const r = await fetch("/api/book", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+        const tEnd = performance.now()
+        if(!r.ok){
+          fail++;
+        }else{
+          const j = await r.json();
+          if (j && j.ok){
+            ok++;
+            const dur = typeof j.duration_ms === "number"
+              ? j.duration_ms
+              : (tEnd - tStart);
+            durations.push(dur);
+          }  
+          else {
+            fail++;
+          }
+        }
+      }catch(e){
+        fail++;
+      }
+    }
+
+    let stats = "";
+    if (durations.length > 0){
+      const min = Math.min(...durations);
+      const max = Math.max(...durations);
+      const avg = durations.reduce((s,x)=>s+x,0) / durations.length;
+      stats = `\n\nTransation time (ms): \n min = ${min.toFixed(2)}\n max = ${max.toFixed(2)}\n avg = ${avg.toFixed(2)}`;
+      console.log("Transaction duration (ms):", durations);
+    }
+    alert(`Server simulation complete.\nSuccess: ${ok}\nFailed: ${fail}`);
+    // Optionally refresh any client tables that read from the server (if present in UI)
+  }catch(e){
+    alert("Simulation failed: " + e.message);
+  }
+}

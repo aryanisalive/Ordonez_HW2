@@ -77,6 +77,38 @@ input:focus, select:focus{border-color:var(--accent)}
   border-color: #c75656;
 }
 
+
+/* Admin layout, themed to match the app */
+.admin-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+
+.admin-browse .row,
+.admin-traces  .row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Use the shared muted color token everywhere */
+.muted { color: var(--muted); }
+
+/* Use existing .btn + .btn.danger styles from the theme; no custom button selector needed */
+
+/* Console matches the app’s card/border system */
+.console {
+  margin-top: 0.75rem;
+  max-height: 360px;
+  overflow: auto;
+  background: #0b1020;
+  color: #d1d5db;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.console pre { margin: 0 0 0.5rem 0; }
+.console pre.ok { color: #c8ffef; }
+.console pre.error { color: #ffc3c3; }
+
 .table-wrap{overflow:auto; border:1px solid var(--border); border-radius:12px}
 .table{width:100%; border-collapse:collapse; min-width:900px}
 th, td{padding:10px 12px; border-bottom:1px solid var(--border); text-align:left}
@@ -94,3 +126,6 @@ thead th{position:sticky; top:0; background:#0e1016}
   .grid, .grid-two{grid-template-columns: 1fr}
   .table{min-width:700px}
 }
+
+
+
