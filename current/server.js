@@ -1,7 +1,7 @@
 import fs from "fs";
 import express from "express";   // keep your existing import
 import path from "path";         // keep your existing import
-import pool, { checkDatabaseConnection } from "./db/pool.js"; // keep this
+import pool, { checkDatabaseConnection } from "./pool.js"; // keep this
 const adminRouter = express.Router();
 
 const app = express();
@@ -18,7 +18,7 @@ pool.query = async function patchedQuery(...args) {
   // arg[0] can be text or { text, values }
   const sql = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].text) || '';
   try {
-    if (/^\s*select\b/i.test(sql)) { 
+    if (/^\s*select\b/i.test(sql)) {
       QUERY_TRACE.push(sql.trim() + ';');
     } else {
       TRANSACTION_TRACE.push(sql.trim() + ';');
@@ -45,10 +45,9 @@ const LOOKUP_SQL = fs.readFileSync("./seed.sql", "utf-8");
 // ---------- Admin Endpoints ----------
 
 // Create tables from SCHEMA_SQL
-adminRouter.post('/create-tables', async (req, res) => {
+adminRouter.post('/create-tables', async (_req, res) => {
   try {
     if (!SCHEMA_SQL.trim()) return res.status(400).json({ ok: false, error: 'SCHEMA_SQL is empty. Fill it in.' });
-    // No need for locks on table creation
     await pool.query('BEGIN');
     await pool.query(SCHEMA_SQL);
     await pool.query('COMMIT');
@@ -60,7 +59,7 @@ adminRouter.post('/create-tables', async (req, res) => {
 });
 
 // Initialize lookups
-adminRouter.post('/init-lookups', async (req, res) => {
+adminRouter.post('/init-lookups', async (_req, res) => {
   try {
     if (!LOOKUP_SQL.trim()) return res.status(400).json({ ok: false, error: 'LOOKUP_SQL is empty. Fill it in.' });
     await pool.query('BEGIN');
@@ -74,7 +73,7 @@ adminRouter.post('/init-lookups', async (req, res) => {
 });
 
 // List tables (public schema)
-adminRouter.get('/tables', async (req, res) => {
+adminRouter.get('/tables', async (_req, res) => {
   try {
     const q = `
       SELECT table_name
@@ -90,9 +89,9 @@ adminRouter.get('/tables', async (req, res) => {
 });
 
 // Browse N rows (default 10) from a specific table (validated against information_schema)
-adminRouter.get('/browse', async (req, res) => {
-  const table = (req.query.table || '').toString().trim();
-  const limit = Math.min(parseInt(req.query.limit || '10', 10) || 10, 100); // max 100
+adminRouter.get('/browse', async (_req, res) => {
+  const table = (_req.query.table || '').toString().trim();
+  const limit = Math.min(parseInt(_req.query.limit || '10', 10) || 10, 100); // max 100
   if (!table) return res.status(400).json({ ok: false, error: 'Missing ?table=' });
 
   try {
@@ -116,8 +115,8 @@ const LOOKUP_TABLES = new Set([
   // add your lookup tables here, e.g. 'category', 'app_config'
 ]);
 
-adminRouter.post('/truncate', async (req, res) => {
-  const body = req.body || {};
+adminRouter.post('/truncate', async (_req, res) => {
+  const body = _req.body || {};
   const onlyNonLookup = body.onlyNonLookup !== false; // default true
   try {
     const { rows: list } = await pool.query(
@@ -140,15 +139,15 @@ adminRouter.post('/truncate', async (req, res) => {
 });
 
 // Download traces
-adminRouter.get('/download/transaction.sql', (req, res) => {
+adminRouter.get('/download/transaction.sql', (_req, res) => {
   toDownload(res, 'transaction.sql', TRANSACTION_TRACE.join('\n') + '\n');
 });
-adminRouter.get('/download/query.sql', (req, res) => {
+adminRouter.get('/download/query.sql', (_req, res) => {
   toDownload(res, 'query.sql', QUERY_TRACE.join('\n') + '\n');
 });
 
 // Clear traces (optional)
-adminRouter.post('/clear-traces', (req, res) => {
+adminRouter.post('/clear-traces', (_req, res) => {
   TRANSACTION_TRACE = [];
   QUERY_TRACE = [];
   res.json({ ok: true, message: 'Traces cleared.' });
@@ -175,11 +174,11 @@ app.listen(process.env.PORT || 3000, () => {
 // Users
 app.get("/api/users", async (_req, res) => {
   try {
-    const { rows } = await pool.query('SELECT user_id, name, email FROM "USER" ORDER BY user_id ASC');
+    const { rows } = await pool.query('SELECT user_id, name, email, phone FROM "USER" ORDER BY user_id ASC');
     res.json(rows);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ok: false, error: e.message });
   }
 });
 
@@ -198,7 +197,7 @@ app.get("/api/bank/users", async (_req, res) => {
 });
 
 // BANK: drivers (user join) with accounts
-app.get("/api/bank/drivers", async (_req, res) => {
+app.get("/api/bank/drivers", async (__req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT d.driver_id, u.user_id, u.name, u.email,
@@ -213,7 +212,7 @@ app.get("/api/bank/drivers", async (_req, res) => {
 });
 
 // BANK: accounts by specific user
-app.get("/api/bank/by-user/:userId", async (req, res) => {
+app.get("/api/bank/by-user/:userId", async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT u.user_id, u.name, u.email,
@@ -222,13 +221,13 @@ app.get("/api/bank/by-user/:userId", async (req, res) => {
    LEFT JOIN BANK_ACCOUNT ba ON ba.user_id = u.user_id
        WHERE u.user_id = $1
     ORDER BY ba.account_id
-    `, [req.params.userId]);
+    `, [_req.params.userId]);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // BANK: accounts by specific driver
-app.get("/api/bank/by-driver/:driverId", async (req, res) => {
+app.get("/api/bank/by-driver/:driverId", async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT d.driver_id, u.user_id, u.name, u.email,
@@ -238,7 +237,7 @@ app.get("/api/bank/by-driver/:driverId", async (req, res) => {
    LEFT JOIN BANK_ACCOUNT ba ON ba.user_id = u.user_id
        WHERE d.driver_id = $1
     ORDER BY ba.account_id
-    `, [req.params.driverId]);
+    `, [_req.params.driverId]);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -281,7 +280,7 @@ app.get("/api/drivers/all", async (_req, res) => {
 // - inserts RIDE, RIDE_TIME, PRICE (uses APP_CONFIG.tax_rate)
 // - PAYMENT:
 //     * card -> authorizes + CAPTURES and moves funds from payer account to company operating account
-app.post("/api/book", async (req, res) => {
+app.post("/api/book", async (_req, res) => {
   const {
     userName,           // string
     driverId,           // int (selected from dropdown)
@@ -290,7 +289,7 @@ app.post("/api/book", async (req, res) => {
     paymentMethod,      // "Card" | "Cash" | "Wallet"
     rideTime,           // ISO datetime-local string
     basePrice           // number in dollars (string/number)
-  } = req.body || {};
+  } = _req.body || {};
 
   const client = await pool.connect();
   try {
@@ -299,12 +298,10 @@ app.post("/api/book", async (req, res) => {
     // 1) Ensure/Find USER (by name)
     let userId;
     {
-      // From what I can tell, this line checks to see if there are any users with a certain name
       const f = await client.query(`SELECT user_id FROM "USER" WHERE name = $1 LIMIT 1`, [userName]);
       if (f.rowCount) {
         userId = f.rows[0].user_id;
       } else {
-        // Well this is one way to do it Aryan
         const email = (userName || "user").toLowerCase().replace(/\s+/g, ".") + "@example.com";
         const ins = await client.query(
           `INSERT INTO "USER"(name,email) VALUES ($1,$2)
@@ -321,7 +318,7 @@ app.post("/api/book", async (req, res) => {
 
     // 2) Get category_id
     const catQ = await client.query(
-      `SELECT category_id FROM CATEGORY WHERE category_name=$1 FOR UPDATE`, [category]
+      `SELECT category_id FROM CATEGORY WHERE category_name=$1`, [category]
     );
     if (!catQ.rowCount) throw new Error(`Unknown category: ${category}`);
     const categoryId = catQ.rows[0].category_id;
@@ -334,47 +331,47 @@ app.post("/api/book", async (req, res) => {
     );
     let pickupId = pickQ.rows[0]?.place_id;
     if (!pickupId) {
-      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1 FOR UPDATE`, [pickup]);
+      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1`, [pickup]);
       pickupId = f.rows[0].place_id;
     }
 
     const dropQ = await client.query(
-      `INSERT INTO LOCATION(address) VALUES ($1)
+      `INSERT INTO location(address) VALUES ($1)
        ON CONFLICT (address) DO NOTHING
        RETURNING place_id`, [dropoff]
     );
     let dropoffId = dropQ.rows[0]?.place_id;
     if (!dropoffId) {
-      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1 FOR UPDATE`, [dropoff]);
+      const f = await client.query(`SELECT place_id FROM LOCATION WHERE address=$1`, [dropoff]);
       dropoffId = f.rows[0].place_id;
     }
 
-    // 4) Insert RIDE (requested) and RIDE_TIME
+    // 4) Insert RIDE (_requested) and RIDE_TIME
     const rideIns = await client.query(
       `INSERT INTO RIDE(rider_id, driver_id, category_id, pickup_place_id, dropoff_place_id, status)
-       VALUES ($1,$2,$3,$4,$5,'requested')
+       VALUES ($1,$2,$3,$4,$5,'_requested')
        RETURNING ride_id`,
       [userId, driverId, categoryId, pickupId, dropoffId]
     );
     const rideId = rideIns.rows[0].ride_id;
 
     await client.query(
-      `INSERT INTO RIDE_TIME(ride_id, request_ts, pickup_ts)
+      `INSERT INTO RIDE_TIME(ride_id, _request_ts, pickup_ts)
        VALUES ($1, NOW(), $2::timestamp)`,
       [rideId, rideTime || null]
     );
 
     // 5) PRICE (base from form, tax from APP_CONFIG) + compute tax/total now for downstream logic
     const baseCents = Math.round(Number(basePrice || 0) * 100);
-    const taxCfg = await client.query(`SELECT tax_rate FROM APP_CONFIG WHERE id IS TRUE FOR UPDATE`);
+    const taxCfg = await client.query(`SELECT tax_rate FROM APP_CONFIG WHERE id IS TRUE`);
     const taxRate = Number(taxCfg.rows[0]?.tax_rate ?? 8.25);
     const taxCents = Math.round(baseCents * (taxRate / 100));
     const totalCents = baseCents + taxCents;
 
     await client.query(
-      `INSERT INTO PRICE(ride_id, base_cents, distance_cents, time_cents, booking_cents, tax_rate_pct, tax_cents, total_cents)
-       VALUES ($1, $2, 0, 0, 0, $3, $4, $5)`,
-      [rideId, baseCents, taxRate, taxCents, totalCents]
+      `INSERT INTO PRICE(ride_id, base_cents, distance_cents, time_cents, booking_cents, tax_rate_pct)
+       VALUES ($1, $2, 0, 0, 0, $3)`,
+      [rideId, baseCents, taxRate]
     );
 
     // 6) Optional PAYMENT (authorize; if card, CAPTURE and move funds between BANK_ACCOUNTs)
@@ -384,7 +381,7 @@ app.post("/api/book", async (req, res) => {
       let accountId = null;
       if (method === "card") {
         const acc = await client.query(
-          `SELECT account_id FROM BANK_ACCOUNT WHERE user_id=$1 AND status='active' ORDER BY account_id LIMIT 1 FOR UPDATE`,
+          `SELECT account_id FROM BANK_ACCOUNT WHERE user_id=$1 AND status='active' ORDER BY account_id LIMIT 1`,
           [userId]
         );
         if (!acc.rowCount) {
@@ -393,7 +390,7 @@ app.post("/api/book", async (req, res) => {
         accountId = acc.rows[0].account_id;
       }
 
-      const amt = await client.query(`SELECT total_cents, base_cents FROM PRICE WHERE ride_id=$1 FOR UPDATE`, [rideId]);
+      const amt = await client.query(`SELECT total_cents, base_cents FROM PRICE WHERE ride_id=$1`, [rideId]);
       const amountCents = amt.rows[0].total_cents;
 
       // Insert payment as authorized first
@@ -407,29 +404,15 @@ app.post("/api/book", async (req, res) => {
 
       // If card, CAPTURE immediately and move funds between bank accounts
       if (method === 'card') {
-        // Fetch config for company operating account & commission rate
-        const cfg = await client.query(`SELECT operating_account_id, commission_rate_pct FROM APP_CONFIG WHERE id IS TRUE FOR UPDATE`);
-        const operatingAccountId = cfg.rows[0]?.operating_account_id;
-        if (!operatingAccountId) throw new Error("APP_CONFIG.operating_account_id is not set");
-
-        // Lock both accounts
-        const payer = await client.query(`SELECT account_id, balance_cents FROM BANK_ACCOUNT WHERE account_id=$1 FOR UPDATE`, [accountId]);
-        const operating = await client.query(`SELECT account_id, balance_cents FROM BANK_ACCOUNT WHERE account_id=$1 FOR UPDATE`, [operatingAccountId]);
-
-        if (!payer.rowCount) throw new Error("Payer bank account not found");
-        if (!operating.rowCount) throw new Error("Operating bank account not found");
-
-        const payerBal = Number(payer.rows[0].balance_cents);
-        if (payerBal < amountCents) throw new Error("Insufficient funds on payer account");
-
-        await client.query(`UPDATE BANK_ACCOUNT SET balance_cents = balance_cents - $1 WHERE account_id=$2`, [amountCents, accountId]);
-        await client.query(`UPDATE BANK_ACCOUNT SET balance_cents = balance_cents + $1 WHERE account_id=$2`, [amountCents, operatingAccountId]);
-
-        await client.query(`UPDATE PAYMENT SET status='captured' WHERE payment_id=$1`, [payIns.rows[0].payment_id]);
+        await client.query(
+          `UPDATE PAYMENT SET status = 'captured', captured_ts = NOW()
+           WHERE payment_id = $1`,
+           [payIns.rows[0].payment_id]
+        );
       }
     }
 
-    // (Optional) mark driver booked = true while ride is requested
+    // (Optional) mark driver booked = true while ride is _requested
     await client.query(`UPDATE DRIVER SET booked=true WHERE driver_id=$1`, [driverId]);
 
     await client.query("COMMIT");
@@ -462,8 +445,8 @@ app.post("/api/book", async (req, res) => {
 
 // GET /api/rides  (recent rides with optional filters)
 // Query params: ?user=...&driver=...&category=...  (partial, case-insensitive)
-app.get("/api/rides", async (req, res) => {
-  const { user = "", driver = "", category = "" } = req.query;
+app.get("/api/rides", async (_req, res) => {
+  const { user = "", driver = "", category = "" } = _req.query;
 
   const wh = [];
   const args = [];
@@ -477,7 +460,7 @@ app.get("/api/rides", async (req, res) => {
     const { rows } = await pool.query(`
       SELECT
         r.ride_id,
-        COALESCE(rt.request_ts, rt.pickup_ts, NOW()) AS ts,
+        COALESCE(rt._request_ts, rt.pickup_ts, NOW()) AS ts,
         u.name  AS rider,
         du.name AS driver,
         l1.address AS pickup,
@@ -512,21 +495,21 @@ app.get("/api/rides", async (req, res) => {
  * All support optional ?start=YYYY-MM-DD&end=YYYY-MM-DD (inclusive on start; end is inclusive by day)
  */
 function dateRangeWhere(alias = 'rt'){
-  return `($1::date IS NULL OR COALESCE(${alias}.request_ts, ${alias}.pickup_ts) >= $1::date)
-          AND ($2::date IS NULL OR COALESCE(${alias}.request_ts, ${alias}.pickup_ts) < ($2::date + INTERVAL '1 day'))`;
+  return `($1::date IS NULL OR COALESCE(${alias}._request_ts, ${alias}.pickup_ts) >= $1::date)
+          AND ($2::date IS NULL OR COALESCE(${alias}._request_ts, ${alias}.pickup_ts) < ($2::date + INTERVAL '1 day'))`;
 }
 
 // 1) Commission by day & category
-app.get('/api/reports/commission-by-day-category', async (req, res) => {
-  const start = req.query.start || null;
-  const end   = req.query.end || null;
+app.get('/api/reports/commission-by-day-category', async (_req, res) => {
+  const start = _req.query.start || null;
+  const end   = _req.query.end || null;
   try {
     const { rows } = await pool.query(`
       WITH cfg AS (
         SELECT COALESCE(commission_rate_pct, 20.0) AS rate
           FROM APP_CONFIG WHERE id IS TRUE
       )
-      SELECT to_char(date_trunc('day', COALESCE(rt.request_ts, rt.pickup_ts)), 'YYYY-MM-DD') AS day,
+      SELECT to_char(date_trunc('day', COALESCE(rt._request_ts, rt.pickup_ts)), 'YYYY-MM-DD') AS day,
              c.category_name,
              COUNT(*) AS rides,
              COALESCE(SUM(pr.base_cents),0)::bigint AS base_cents,
@@ -549,12 +532,12 @@ app.get('/api/reports/commission-by-day-category', async (req, res) => {
 });
 
 // 2) Rides per driver per day
-app.get('/api/reports/rides-per-driver-per-day', async (req, res) => {
-  const start = req.query.start || null;
-  const end   = req.query.end || null;
+app.get('/api/reports/rides-per-driver-per-day', async (_req, res) => {
+  const start = _req.query.start || null;
+  const end   = _req.query.end || null;
   try {
     const { rows } = await pool.query(`
-      SELECT to_char(date_trunc('day', COALESCE(rt.request_ts, rt.pickup_ts)), 'YYYY-MM-DD') AS day,
+      SELECT to_char(date_trunc('day', COALESCE(rt._request_ts, rt.pickup_ts)), 'YYYY-MM-DD') AS day,
              du.name AS driver,
              COUNT(*) AS rides,
              COALESCE(SUM(pr.total_cents),0)::bigint AS gross_cents
@@ -575,9 +558,9 @@ app.get('/api/reports/rides-per-driver-per-day', async (req, res) => {
 });
 
 // 3) Outstanding payouts (driver take still owed) per driver
-app.get('/api/reports/outstanding-payouts', async (req, res) => {
-  const start = req.query.start || null;
-  const end   = req.query.end || null;
+app.get('/api/reports/outstanding-payouts', async (_req, res) => {
+  const start = _req.query.start || null;
+  const end   = _req.query.end || null;
   try {
     const { rows } = await pool.query(`
       WITH cfg AS (
@@ -608,6 +591,7 @@ app.get('/api/reports/outstanding-payouts', async (req, res) => {
 });
 
 // Static app fallback
-app.get("*", (_req, res) => {
+app.use((_req, res, next) => {
+  if (_req.path.startsWith("/api/")) return next();
   res.sendFile(path.join(publicDir, "index.html"));
 });

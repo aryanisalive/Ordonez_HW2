@@ -12,7 +12,8 @@ ON CONFLICT (user_id) DO NOTHING;
 -- Categories
 INSERT INTO CATEGORY(category_name, base_fee_cents, per_km_cents, per_min_cents, commission_pct) VALUES
  ('Standard', 200, 120, 40, 25.0),
- ('XL',       300, 170, 55, 28.0)
+ ('XL',       300, 170, 55, 28.0),
+ ('Executive', 400, 220, 70, 31.0)
 ON CONFLICT (category_name) DO NOTHING;
 
 -- Locations
@@ -33,7 +34,7 @@ INSERT INTO RIDE(rider_id, driver_id, category_id, pickup_place_id, dropoff_plac
 SELECT rider_id, driver_id, category_id, p1, p2, 'completed' FROM ids
 RETURNING ride_id \gset
 
-INSERT INTO RIDE_TIME(ride_id, request_ts, accept_ts, pickup_ts, dropoff_ts)
+INSERT INTO RIDE_TIME(ride_id, _request_ts, accept_ts, pickup_ts, dropoff_ts)
 VALUES (:ride_id, NOW()-INTERVAL '30 min', NOW()-INTERVAL '28 min', NOW()-INTERVAL '25 min', NOW()-INTERVAL '5 min');
 
 -- Price: base only for demo; generated columns compute subtotal/tax/total
@@ -57,8 +58,7 @@ SELECT
 FROM PRICE p JOIN RIDE r ON r.ride_id=p.ride_id
 WHERE p.ride_id = :ride_id
 RETURNING payment_id \gset
--- Ensures Safe Update
-SELECT * FROM PAYMENT WHERE payment_id = :payment_id FOR UPDATE;
+
 UPDATE PAYMENT SET status='captured', captured_ts=NOW() WHERE payment_id = :payment_id;
 
 -- Receipt lines

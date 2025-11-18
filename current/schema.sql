@@ -40,13 +40,13 @@ CREATE TABLE IF NOT EXISTS RIDE(
   pickup_place_id  INT NOT NULL REFERENCES LOCATION(place_id),
   dropoff_place_id INT NOT NULL REFERENCES LOCATION(place_id),
   status VARCHAR(20) NOT NULL DEFAULT 'requested'
-    CHECK (status IN ('requested','accepted','en_route','picked_up','completed','rider_canceled','driver_canceled'))
+    CHECK (status IN ('_requested','accepted','en_route','picked_up','completed','rider_canceled','driver_canceled'))
 );
 
 -- RIDE_TIME (1:1 with RIDE)
 CREATE TABLE IF NOT EXISTS RIDE_TIME(
   ride_id    INT PRIMARY KEY REFERENCES RIDE(ride_id) ON DELETE CASCADE,
-  request_ts TIMESTAMP NOT NULL DEFAULT NOW(),
+  _request_ts TIMESTAMP NOT NULL DEFAULT NOW(),
   accept_ts  TIMESTAMP,
   pickup_ts  TIMESTAMP,
   dropoff_ts TIMESTAMP,
