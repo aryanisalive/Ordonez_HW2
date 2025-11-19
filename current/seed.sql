@@ -131,6 +131,8 @@ FROM PRICE p JOIN RIDE r ON r.ride_id=p.ride_id
 WHERE p.ride_id = :ride_id
 RETURNING payment_id \gset
 
+-- Locks the columns status and captured_ts of the row where payment_id = :payment_id for update
+SELECT status, captured_ts FROM PAYMENT WHERE payment_id = :payment_id FOR UPDATE;
 UPDATE PAYMENT SET status='captured', captured_ts=NOW() WHERE payment_id = :payment_id;
 
 -- Receipt lines

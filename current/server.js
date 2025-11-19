@@ -474,6 +474,11 @@ app.post("/api/book", async (_req, res) => {
 
       // If card, CAPTURE immediately and move funds between bank accounts
       if (method === 'card') {
+        // Lock payer's status and captured timestamp
+        await client.query(
+          `SELECT status, captured_ts FROM PAYMENT WHERE payment_id = $1 FOR UPDATE`,
+          [payIns.rows[0].payment_id]
+        );
         await client.query(
           `UPDATE PAYMENT SET status = 'captured', captured_ts = NOW()
            WHERE payment_id = $1`,
@@ -483,6 +488,8 @@ app.post("/api/book", async (_req, res) => {
     }
 
     // (Optional) mark driver booked = true while ride is _requested
+    // Doesn't really seem optional since this code will always execute, but okay.
+    await client.query(`SELECT booked FROM DRIVER WHERE driver_id = $1 FOR UPDATE`, [driverId]); // Locked to prevent weirdness with bookings.
     await client.query(`UPDATE DRIVER SET booked=true WHERE driver_id=$1`, [driverId]);
 
     await client.query("COMMIT");
