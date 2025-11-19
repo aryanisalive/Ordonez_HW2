@@ -22,10 +22,12 @@ Built for the **HW-DBApp** assignment (Phases 1 & 2).
   * Download generated `transaction.sql` and `query.sql` trace files
 * **Trace logging** automatically captures every executed SQL statement
 
-### Phase 2 — Performance & Concurrency (in progress)
+### Phase 2 — Performance & Concurrency
 
-* Planned: concurrent transaction simulation with timing metrics (ms)
-* Planned: “100 customers / hour” batch scenario
+* Concurrent transaction simulation
+* Transaction time display
+* Create demo video
+* Write report
 
 ---
 
@@ -39,7 +41,8 @@ Built for the **HW-DBApp** assignment (Phases 1 & 2).
 ├── styles.css        # Minimal Tailwind-style look
 ├── schema.sql        # All CREATE TABLE / DDL
 ├── seed.sql          # Demo data and lookup inserts
-└── README.md         # You are here
+├── README.md         # You are here
+└── ER_diagram.pdf    # Our server model
 ```
 
 ---
@@ -54,8 +57,9 @@ npm install express pg
 
 ### 2️⃣  Configure your database
 
-Set a local Postgres connection string via environment variable (e.g. `.env`):
+Set a local Postgres connection string via the pool.js file and change the values for your database:
 
+EX:
 ```
 PGHOST=localhost
 PGUSER=postgres
@@ -86,6 +90,8 @@ Accessible at the bottom of the home page.
 | **Browse 10**                            | Displays the first 10 rows of the selected table      |
 | **Download transaction.sql / query.sql** | Exports all executed SQL statements                   |
 | **Clear Traces**                         | Empties the trace buffers                             |
+| **README file**                          | Opens the README.md file to view                      |
+| **Demo video**                           | Link to the youtube demo for the webapp               |
 
 ---
 
@@ -107,15 +113,6 @@ LOCATION
 
 ---
 
-## 🧪 Phase 2 Planned Extensions
-
-* Concurrent transaction demo (`Promise.all` bookings)
-* Transaction-time measurement (avg/p95/max)
-* “100 Customers / Hour” simulation preset
-* Additional dashboards for throughput & latency
-
----
-
 ## 🧑‍💻 Development Notes
 
 * **Node version**: ≥ 18
@@ -132,14 +129,14 @@ LOCATION
 * [x] Simulation and reports
 * [x] Admin panel (create/init/truncate/browse)
 * [x] Trace files generated
-* [ ] README + demo video link (add below)
+* [x] README + demo video link
 
 ---
 
 ## 🎥 Demo Video & Links
 
 * **Demo video:** [Add YouTube or Drive link here]
-* **ER diagram:** [Add link to ERD PDF here]
+* **ER diagram:** [Open the ER diagram](ER_diagram.pdf)
 
 ---
 
