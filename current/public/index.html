@@ -13,6 +13,7 @@
       <button class="tab is-active" data-tab="booking" role="tab" aria-selected="true">Booking</button>
       <button class="tab" data-tab="history" role="tab" aria-selected="false">Ride History</button>
       <button class="tab" data-tab="finance" role="tab" aria-selected="false">Finance</button>
+      <button class="tab" data-tab="data" role="tab" aria-selected="false">Data</button>
       <button class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
       <!-- NEW -->
       <button class="tab" data-tab="admin" role="tab" aria-selected="false">Admin</button>
@@ -32,7 +33,9 @@
 
           <div class="field">
             <label for="driverName">Driver</label>
-            <input id="driverName" name="driverName" placeholder="e.g., Samir Patel" required />
+            <select id="driverName" name="driverName" required>
+              <option value="">Loading drivers…</option>
+            </select>
           </div>
 
           <div class="field">
@@ -66,14 +69,28 @@
           </div>
 
           <div class="field">
-            <label for="rideTime">Time</label>
-            <input id="rideTime" name="rideTime" type="datetime-local" required />
+            <label for="rideDate">Date</label>
+            <input id="rideDate" name="rideDate" type="date" required />
           </div>
 
           <div class="field">
-            <label for="basePrice">Base Price ($)</label>
-            <input id="basePrice" name="basePrice" type="number" min="0" step="0.01" placeholder="e.g., 18.50" required />
-          </div>
+              <label for="rideTime">Time</label>
+
+              <!-- Visible rolodex scroll -->
+              <div class="rolodex-wrapper">
+                <div
+                  id="rideTimeRolodex"
+                  class="rolodex"
+                  role="listbox"
+                  aria-label="Select time"
+                  tabindex="0"
+                ></div>
+                <div class="rolodex-highlight" aria-hidden="true"></div>
+              </div>
+
+              <!-- Hidden field the form actually submits / JS reads from -->
+              <input type="hidden" id="rideTime" name="rideTime" />
+            </div>
 
           <div class="field">
             <label for="notes">Notes <span class="hint">(optional)</span></label>
@@ -305,7 +322,95 @@
             </table>
           </div>
         </div>
-</section>
+    </section>
+
+    <!-- Data -->
+    <section id="data" class="panel" role="tabpanel" aria-labelledby="data-tab">
+      <div class="card">
+        <h2>Server Data Overview</h2>
+        <p class="muted">
+          This tab shows users (riders), drivers, and their bank accounts as stored in PostgreSQL.
+        </p>
+
+        <div class="actions">
+          <button id="btnLoadData" class="btn">Load Data from Server</button>
+        </div>
+
+        <!-- USERS-->
+        <h3>Users (Riders)</h3>
+        <div class="table-wrap">
+          <table id="tblUsers" class="table">
+            <thead>
+              <tr>
+                <th>user_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
+
+        <!-- DRIVERS-->
+        <h3>Drivers</h3>
+        <div class="table-wrap">
+          <table id="tblDrivers" class="table">
+            <thead>
+              <tr>
+                <th>driver_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Booked?</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
+
+        <!-- USER BANK -->
+        <h3>User Bank Accs</h3>
+        <div class="table-wrap">
+          <table id="tblUserBank" class="table">
+            <thead>
+              <tr>
+                <th>user_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>account_id</th>
+                <th>Bank #</th>
+                <th>Currency</th>
+                <th>Status</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
+
+
+        <!-- Driver BANK -->
+        <h3>Driver Bank Accs</h3>
+        <div class="table-wrap">
+          <table id="tblDriverBank" class="table">
+            <thead>
+              <tr>
+                <th>driver_id</th>
+                <th>user_id</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>account_id</th>
+                <th>Bank #</th>
+                <th>Currency</th>
+                <th>Status</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody><!-- filled by JS--></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
     <!-- SETTINGS -->
     <section id="settings" class="panel" role="tabpanel" aria-labelledby="settings-tab">

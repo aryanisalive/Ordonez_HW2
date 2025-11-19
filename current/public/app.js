@@ -18,6 +18,12 @@ const DEFAULT_RATES = {
   commissionRatePct: 20.0   // % taken by company (on base, pre-tax)
 };
 
+const CATEGORY_BASE_PRICES = {
+  Standard: 15.00,  // $15.00
+  XL:        25.00,  // $25.00
+  Executive: 40.00   // $40.00
+};
+
 const SIMULATION_POOL = {
   users: ["Alice Johnson", "Bob Smith", "Charlie Brown", "Diana Prince", "Ethan Hunt", "Chase Williams", "Liam Brooks", "Jacob Jameson", "Fernando Martinez", "Jose Lopez"],
   drivers: ["Samir Patel", "Maria Garcia", "David Chen", "Aisha Khan", "Leo Wong", "James Ferguson", "Bella Amelie", "William Matthews", "Kyle Thomas", "Joe Rodriguez"],
@@ -74,6 +80,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Clear history button (if present)
   $("#clearHistory") && $("#clearHistory").addEventListener("click", clearAllRides);
+
+  const btnData = document.getElementById("btnLoadData");
+  if (btnData){
+    btnData.addEventListener("click", loadServerData);
+  }
 });
 
 // ==== Tabs ====
@@ -116,35 +127,203 @@ function initSettings(){
   });
 }
 
+// === Driver Menu ===
+async function populateDriverDropdown() {
+  const select = $("#driverName");
+  if (!select) return;
+
+  select.innerHTML = `<option value="">Loading drivers…</option>`;
+
+  try {
+    // use available drivers; you can switch to /api/drivers/all if you prefer
+    const res = await fetch("/api/drivers/available");
+    if (!res.ok) throw new Error("Failed to load drivers");
+    const drivers = await res.json();
+
+    if (!Array.isArray(drivers) || drivers.length === 0) {
+      select.innerHTML = `<option value="">No drivers available</option>`;
+      return;
+    }
+
+    select.innerHTML = `<option value="">Select…</option>`;
+    drivers.forEach(d => {
+      const name = d.driver_name || d.name || "";
+      if (!name) return;
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      // keep driver_id available if you want later
+      opt.dataset.driverId = d.driver_id;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error(err);
+    select.innerHTML = `<option value="">Failed to load drivers</option>`;
+  }
+}
+
+function populateTimeRolodex() {
+  const container = $("#rideTimeRolodex");
+  const hiddenInput = $("#rideTime");
+  if (!container || !hiddenInput) return;
+
+  container.innerHTML = "";
+
+  const items = [];
+
+  // Build 24h * 15-minute increments
+  for (let hour = 0; hour < 24; hour++) {
+    for (let min = 0; min < 60; min += 15) {
+      const hh = String(hour).padStart(2, "0");
+      const mm = String(min).padStart(2, "0");
+      const value = `${hh}:${mm}`;
+
+      const div = document.createElement("div");
+      div.className = "rolodex-item";
+      div.dataset.value = value;
+      div.textContent = value;
+      container.appendChild(div);
+      items.push(div);
+    }
+  }
+
+  function selectItem(item) {
+    if (!item) return;
+    items.forEach(el => el.classList.remove("is-selected"));
+    item.classList.add("is-selected");
+    hiddenInput.value = item.dataset.value || "";
+  }
+
+  // Click to select
+  container.addEventListener("click", (e) => {
+    const item = e.target.closest(".rolodex-item");
+    if (!item) return;
+    selectItem(item);
+  });
+
+  // Optional: scroll “snap” behavior that updates selection
+  let scrollTimeout = null;
+  container.addEventListener("scroll", () => {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      const rect = container.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+
+      let closest = null;
+      let closestDist = Infinity;
+
+      items.forEach(item => {
+        const r = item.getBoundingClientRect();
+        const itemMid = r.top + r.height / 2;
+        const dist = Math.abs(itemMid - midY);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = item;
+        }
+      });
+
+      selectItem(closest);
+    }, 80);
+  });
+
+  // Preselect: nearest upcoming 15-minute slot
+  const now = new Date();
+  let hour = now.getHours();
+  let minute = now.getMinutes();
+  minute = Math.ceil(minute / 15) * 15;
+  if (minute === 60) {
+    minute = 0;
+    hour = (hour + 1) % 24;
+  }
+  const defaultValue =
+    String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
+
+  const defaultItem =
+    items.find(i => i.dataset.value === defaultValue) || items[0];
+  selectItem(defaultItem);
+  // Scroll the default into view
+  defaultItem?.scrollIntoView({ block: "center" });
+}
+
+
+
 // ==== Booking ====
 function initBooking(){
   const form = $("#bookingForm");
   if (!form) return;
 
+  // NEW: load drivers and time into menus
+  populateDriverDropdown();
+  populateTimeRolodex();
+
   form.addEventListener("input", calcBookingSummary);
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = getBookingData();
     if(!data) return;
 
-    const rides = loadRides();
-    rides.push(data);
-    saveRides(rides);
+    try {
+      const driverId = await findDriverIdByName(data.driverName);
 
-    // Update driver payouts ledger (unpaid until explicitly paid)
-    const payouts = loadPayouts();
-    const key = data.driverName.trim();
-    payouts[key] = payouts[key] || { owedCents: 0 };
-    payouts[key].owedCents += data.driverTakeCents;
-    savePayouts(payouts);
+      const payload = {
+        userName: data.userName,
+        driverId: driverId,
+        pickup: data.pickup,
+        dropoff: data.dropoff,
+        category: data.category,
+        paymentMethod: data.paymentMethod,
+        rideTime: data.createdAt,
+        basePrice: (data.baseCents / 100)
+      };
 
-    form.reset();
-    calcBookingSummary();
-    renderTables();
-    alert("Ride booked.");
+      const tStart = performance.now();
+      const res = await fetch("/api/book", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const tEnd = performance.now();
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Server error: ${res.status} ${errText}`);
+      }
+
+      const json = await res.json();
+      if (!json.ok) {
+        throw new Error(json.error || "Unknown booking error");
+      }
+
+      const duration = typeof json.duration_ms === "number"
+        ? json.duration_ms
+        : (tEnd - tStart);
+      
+      const rides = loadRides();
+      rides.push({
+        ...data,
+        status: "Booked(Server)"
+      });
+      saveRides(rides);
+
+      // Update driver payouts ledger (unpaid until explicitly paid)
+      const payouts = loadPayouts();
+      const key = data.driverName.trim();
+      payouts[key] = payouts[key] || { owedCents: 0 };
+      payouts[key].owedCents += data.driverTakeCents;
+      savePayouts(payouts);
+
+      form.reset();
+      calcBookingSummary();
+      renderTables();
+      alert(`Ride booked successfully. \nServer transaction time: ${duration.toFixed(2)} ms`);
+    } catch(err){
+      console.error(err);
+      alert("Failed to book ride on server: " + err.message);
+    }
   });
 
   $("#resetBooking")?.addEventListener("click", calcBookingSummary);
+  $("#category")?.addEventListener("change", calcBookingSummary);
 
   // --- Simulation buttons ---
   // Support either separate buttons or one unified button.
@@ -166,6 +345,21 @@ function initBooking(){
   calcBookingSummary();
 }
 
+async function findDriverIdByName(name) {
+  const res = await fetch("/api/drivers/all")
+  if (!res.ok) throw new Error("Failed to load drivers from server");
+  const drivers = await res.json();
+  const lower = name.trim().toLowerCase();
+  const match = drivers.find(d => {
+    const n1 = (d.name || "").toLowerCase();
+    const n2 = (d.driver_name || "").toLowerCase();
+    return n1 === lower || n2 === lower;
+  });
+  if (!match){
+    throw new Error(`No driver found with name "${name}". Make sure it matches the seeded driver name.`);
+  }
+  return match.driver_id;
+}
 // Local-only simulation (from original app.js)
 function runSimulation() {
   const numRides = prompt("Enter the number of rides to simulate (1-100):", "10");
@@ -245,11 +439,24 @@ function getBookingData(){
   const dropoff = $("#dropoff")?.value.trim();
   const category = $("#category")?.value;
   const paymentMethod = $("#paymentMethod")?.value;
-  const rideTime = $("#rideTime")?.value;
-  const basePrice = Number($("#basePrice")?.value);
+  const rideDate = $("#rideDate")?.value;  // NEW
+  const rideTime = $("#rideTime")?.value;  // now only HH:MM from dropdown
 
-  if(!userName || !driverName || !pickup || !dropoff || !category || !paymentMethod || !rideTime || isNaN(basePrice)){
+  if(!userName || !driverName || !pickup || !dropoff || !category || !paymentMethod || !rideDate || !rideTime){
     alert("Please complete all required fields.");
+    return null;
+  }
+
+  const basePrice = CATEGORY_BASE_PRICES[category] ?? 0;
+  if (!basePrice) {
+    alert("Please select a valid ride category.");
+    return null;
+  }
+
+  // build a local date/time and convert to ISO
+  const dateTime = new Date(`${rideDate}T${rideTime}:00`);
+  if (Number.isNaN(dateTime.getTime())) {
+    alert("Please pick a valid date and time.");
     return null;
   }
 
@@ -262,22 +469,26 @@ function getBookingData(){
 
   return {
     id: cryptoRandomId(),
-    createdAt: new Date(rideTime).toISOString(),
+    createdAt: dateTime.toISOString(),
     userName, driverName, pickup, dropoff, category, paymentMethod,
     baseCents, taxCents, totalCents, commissionCents, driverTakeCents,
     notes: $("#notes")?.value.trim() || "",
-    status: "Booked" // could evolve to Completed/Canceled
+    status: "Booked"
   };
 }
 
 function calcBookingSummary(){
-  const basePrice = Number($("#basePrice")?.value || 0);
+  const category = $("#category")?.value;
+  const basePrice = CATEGORY_BASE_PRICES[category] ?? 0;
+
   const { taxRatePct } = loadRates();
   const tax = basePrice * (taxRatePct / 100);
+
   $("#taxRateLabel") && ( $("#taxRateLabel").textContent = `${taxRatePct}%` );
   $("#taxAmount") && ( $("#taxAmount").textContent = `$${tax.toFixed(2)}` );
   $("#totalAmount") && ( $("#totalAmount").textContent = `$${(basePrice + tax).toFixed(2)}` );
 }
+
 
 // ==== Render tables ====
 function renderTables(){
@@ -638,6 +849,102 @@ async function onClearTraces() {
   }
 }
 
+async function loadServerData() {
+  try {
+    const [users, drivers, userBank,driverBank] = await Promise.all([
+      fetchJSON("/api/users"),
+      fetchJSON("/api/drivers/all"),
+      fetchJSON("/api/bank/users"),
+      fetchJSON("/api/bank/drivers"),
+    ]);
+    renderUserTable(users);
+    renderDriversTable(drivers);
+    renderUserBankTable(userBank);
+    renderDriverBankTable(driverBank);
+  } catch(err) {
+    console.error(err);
+    alert("Failed to load server data: " + err.message);
+  }
+}
+
+function renderUserTable(users){
+  const tbody = document.querySelector("#tblUsers tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  users.forEach(u => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${u.user_id}</td>
+      <td>${escapeHTML(u.name || "")}</td>
+      <td>${escapeHTML(u.email || "")}</td>
+      <td>${escapeHTML(u.phone || "")}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderDriversTable(drivers){
+  const tbody = document.querySelector("#tblDrivers tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  drivers.forEach(d => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${d.driver_id}</td>
+      <td>${escapeHTML(d.driver_name || d.name || "")}</td>
+      <td>${escapeHTML(d.driver_email || d.email || "")}</td>
+      <td>${escapeHTML(d.booked ? "Yes" : "No")}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderUserBankTable(rows){
+  const tbody = document.querySelector("#tblUserBank tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.user_id}</td>
+      <td>${escapeHTML(r.name || "")}</td>
+      <td>${escapeHTML(r.email || "")}</td>
+      <td>${r.account_id ?? ""}</td>
+      <td>${escapeHTML(r.bank_num || "")}</td>
+      <td>${escapeHTML(r.currency || "")}</td>
+      <td>${escapeHTML(r.status || "")}</td>
+      <td>$${((r.balance_cents || 0) / 100).toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderDriverBankTable(rows){
+  const tbody = document.querySelector("#tblDriverBank tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.driver_id}</td>
+      <td>${r.user_id}</td>
+      <td>${escapeHTML(r.name || "")}</td>
+      <td>${escapeHTML(r.email || "")}</td>
+      <td>${r.account_id ?? ""}</td>
+      <td>${escapeHTML(r.bank_num || "")}</td>
+      <td>${escapeHTML(r.currency || "")}</td>
+      <td>${escapeHTML(r.status || "")}</td>
+      <td>$${((r.balance_cents || 0) / 100).toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+
 // --- Hook up events once the DOM is ready ---
 document.addEventListener('DOMContentLoaded', () => {
   // If you show Admin by default or behind a tab, call loadAdminTables() when visible.
@@ -699,6 +1006,8 @@ async function runServerSimulation(){
     }
 
     let ok = 0, fail = 0;
+    const durations = [];
+
     for (let i=0;i<N;i++){
       const d = rand(drivers);
       const payload = {
@@ -711,24 +1020,43 @@ async function runServerSimulation(){
         rideTime: randomTime(),
         basePrice: randomBase()
       };
-
+      
+      const tStart = performance.now()
       try{
         const r = await fetch("/api/book", {
           method: "POST",
           headers: {"Content-Type":"application/json"},
           body: JSON.stringify(payload)
         });
+        const tEnd = performance.now()
         if(!r.ok){
           fail++;
         }else{
           const j = await r.json();
-          if (j && j.ok) ok++; else fail++;
+          if (j && j.ok){
+            ok++;
+            const dur = typeof j.duration_ms === "number"
+              ? j.duration_ms
+              : (tEnd - tStart);
+            durations.push(dur);
+          }  
+          else {
+            fail++;
+          }
         }
       }catch(e){
         fail++;
       }
     }
 
+    let stats = "";
+    if (durations.length > 0){
+      const min = Math.min(...durations);
+      const max = Math.max(...durations);
+      const avg = durations.reduce((s,x)=>s+x,0) / durations.length;
+      stats = `\n\nTransation time (ms): \n min = ${min.toFixed(2)}\n max = ${max.toFixed(2)}\n avg = ${avg.toFixed(2)}`;
+      console.log("Transaction duration (ms):", durations);
+    }
     alert(`Server simulation complete.\nSuccess: ${ok}\nFailed: ${fail}`);
     // Optionally refresh any client tables that read from the server (if present in UI)
   }catch(e){
