@@ -257,47 +257,48 @@ function initBooking(){
   populateTimeRolodex();
 
   form.addEventListener("input", calcBookingSummary);
+  
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = getBookingData();
-    if(!data) return;
+    if (!data) return;
 
-    try {
-      const driverId = await findDriverIdByName(data.driverName);
-
-      const payload = {
-        userName: data.userName,
-        driverId: driverId,
-        pickup: data.pickup,
-        dropoff: data.dropoff,
-        category: data.category,
-        paymentMethod: data.paymentMethod,
-        rideTime: data.createdAt,
-        basePrice: (data.baseCents / 100)
-      };
-
+    // Helper: make the /api/book call and normalize errors
+    async function callBook(payload) {
       const tStart = performance.now();
       const res = await fetch("/api/book", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
       const tEnd = performance.now();
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`Server error: ${res.status} ${errText}`);
+      let json = null;
+      try {
+        json = await res.json();
+      } catch (_) {
+        // ignore parse error; we'll fall back to status
       }
 
-      const json = await res.json();
-      if (!json.ok) {
-        throw new Error(json.error || "Unknown booking error");
+      if (!res.ok || !json || !json.ok) {
+        const msg =
+          (json && json.error) ||
+          `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err._tStart = tStart;
+        err._tEnd = tEnd;
+        throw err;
       }
 
       const duration = typeof json.duration_ms === "number"
         ? json.duration_ms
         : (tEnd - tStart);
-      
+
+      return { json, duration };
+    }
+
+    // Helper: apply success effects (local rides/payouts + UI updates)
+    function applySuccessfulBooking(duration) {
       const rides = loadRides();
       rides.push({
         ...data,
@@ -316,9 +317,99 @@ function initBooking(){
       calcBookingSummary();
       renderTables();
       alert(`Ride booked successfully. \nServer transaction time: ${duration.toFixed(2)} ms`);
-    } catch(err){
-      console.error(err);
-      alert("Failed to book ride on server: " + err.message);
+    }
+
+    try {
+      const driverId = await findDriverIdByName(data.driverName);
+
+      const payload = {
+        userName: data.userName,
+        driverId: driverId,
+        pickup: data.pickup,
+        dropoff: data.dropoff,
+        category: data.category,
+        paymentMethod: data.paymentMethod,
+        rideTime: data.createdAt,
+        basePrice: (data.baseCents / 100)
+      };
+
+      // First attempt to book
+      try {
+        const { json, duration } = await callBook(payload);
+        // json.ride / json.payment available if you need them later
+        applySuccessfulBooking(duration);
+        return;
+      } catch (err) {
+        console.error(err);
+
+        // Special case: missing card account
+        const isCard = (data.paymentMethod || "").toLowerCase() === "card";
+        if (isCard && err.message === "No active payment account found for user") {
+          const bankNum = prompt(
+            "To pay by card, please enter a bank account number (e.g., ACC1234):"
+          );
+          if (!bankNum) {
+            alert("Booking cancelled. Card payment requires a bank account.");
+            return;
+          }
+
+          let balanceInput = prompt(
+            "Enter starting bank balance in dollars (e.g., 100.00). This is your simulated account balance.",
+            "100.00"
+          );
+          if (balanceInput === null) {
+            balanceInput = "0";
+          }
+          const balanceDollars = Number(balanceInput);
+          if (isNaN(balanceDollars) || balanceDollars < 0) {
+            alert("Invalid starting balance. Please try booking again.");
+            return;
+          }
+
+          // Create the bank account on the server
+          try {
+            const bankRes = await fetch("/api/bank/create-for-user", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userName: data.userName,
+                bankNum,
+                balanceDollars,
+                currency: "USD"
+              })
+            });
+            const bankJson = await bankRes.json().catch(() => null);
+            if (!bankRes.ok || !bankJson || !bankJson.ok) {
+              const msg =
+                (bankJson && bankJson.error) ||
+                `HTTP ${bankRes.status}`;
+              alert("Could not create bank account: " + msg);
+              return;
+            }
+          } catch (e2) {
+            console.error(e2);
+            alert("Failed to create bank account: " + e2.message);
+            return;
+          }
+
+          // Retry booking once now that a bank account exists
+          try {
+            const { json: json2, duration: duration2 } = await callBook(payload);
+            applySuccessfulBooking(duration2);
+            return;
+          } catch (err2) {
+            console.error(err2);
+            alert("Failed to book ride even after adding bank account: " + err2.message);
+            return;
+          }
+        }
+
+        // Fallback: generic error
+        alert("Failed to book ride on server: " + err.message);
+      }
+    } catch (errOuter) {
+      console.error(errOuter);
+      alert("Failed to book ride on server: " + errOuter.message);
     }
   });
 
