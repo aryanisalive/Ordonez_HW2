@@ -242,6 +242,76 @@ app.get("/api/bank/by-driver/:driverId", async (_req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// BANK: create an active bank account for a user by name (used by booking UI)
+app.post("/api/bank/create-for-user", async (_req, res) => {
+  const { userName, bankNum, balanceDollars, currency } = _req.body || {};
+
+  if (!userName || !bankNum) {
+    return res.status(400).json({ ok: false, error: "userName and bankNum are required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Ensure / find USER (same pattern as /api/book)
+    let userId;
+    {
+      const f = await client.query(`SELECT user_id FROM "USER" WHERE name = $1 LIMIT 1`, [userName]);
+      if (f.rowCount) {
+        userId = f.rows[0].user_id;
+      } else {
+        const email = (userName || "user").toLowerCase().replace(/\s+/g, ".") + "@example.com";
+        const ins = await client.query(
+          `INSERT INTO "USER"(name,email) VALUES ($1,$2)
+           ON CONFLICT (email) DO NOTHING
+           RETURNING user_id`,
+          [userName, email]
+        );
+        if (ins.rowCount) {
+          userId = ins.rows[0].user_id;
+        } else {
+          const f2 = await client.query(`SELECT user_id FROM "USER" WHERE email = $1`, [email]);
+          userId = f2.rows[0].user_id;
+        }
+      }
+    }
+
+    // If user already has an active account, just return it
+    const existing = await client.query(
+      `SELECT account_id, bank_num, balance_cents, currency, status
+         FROM BANK_ACCOUNT
+        WHERE user_id = $1 AND status = 'active'
+        ORDER BY account_id LIMIT 1`,
+      [userId]
+    );
+    if (existing.rowCount) {
+      await client.query("COMMIT");
+      return res.json({ ok: true, account: existing.rows[0], userId });
+    }
+
+    const balDollars = Number(balanceDollars || 0);
+    const balanceCents = Math.round(isNaN(balDollars) ? 0 : balDollars * 100);
+    const cur = (currency || "USD").toUpperCase().slice(0, 3);
+
+    const insAcc = await client.query(
+      `INSERT INTO BANK_ACCOUNT(user_id, bank_num, balance_cents, currency, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       RETURNING account_id, bank_num, balance_cents, currency, status`,
+      [userId, bankNum, balanceCents, cur]
+    );
+
+    await client.query("COMMIT");
+    res.json({ ok: true, account: insAcc.rows[0], userId });
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    console.error(e);
+    res.status(400).json({ ok: false, error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // List available drivers (JOIN DRIVER → USER)
 app.get("/api/drivers/available", async (_req, res) => {
   try {
