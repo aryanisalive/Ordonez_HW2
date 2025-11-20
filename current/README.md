@@ -78,40 +78,20 @@ Local Simulation	Browser only	1 booking at a time	Quick correctness demo
 Server Simulation	Backend	N concurrent bookings	Shows transaction & lock behavior
 
 ⚡ Concurrency Simulation (Phase-2 Requirement)
-The concurrency simulator is a central educational feature.
+The simulator stress-tests the booking transaction by running overlapping ride requests and reporting how PostgreSQL behaves under contention.
 
-How to run it
-Create Tables
+### How to run it
+1. In the Admin panel, click **Create Tables** and **Initialize Lookups**.
+2. Scroll to **Simulation** → **Simulate Ride**.
+3. When prompted for mode, type `server` to run the backend-driven concurrency test (the `local` option fires one booking at a time in the browser).
+4. Enter the number of concurrent rides (e.g., `20`). The frontend calls `runServerSimulation()`, which prepares random booking payloads, defines `fireOneRide()` to POST `/api/book`, and launches *N* copies in parallel via `Promise.all(...)`.
 
-Initialize Lookups
+This produces N overlapping transactions against PostgreSQL, allowing you to observe lock waits and isolation behavior.
 
-Scroll to Simulation section → Simulate Ride
+### Understanding the output
+After the batch finishes, the console prints a summary like:
 
-When prompted, type:
-server
-
-Enter number of concurrent rides (e.g., 20)
-
-The frontend triggers runServerSimulation() → which:
-
-prepares random booking payloads
-
-defines fireOneRide() → POSTS /api/book
-
-launches N bookings in parallel:
-
-js
-Copy code
-await Promise.all(
-  Array.from({ length: N }, () => fireOneRide())
-);
-This sends N concurrent transactions to PostgreSQL, exercising locking and isolation.
-
-🔍 Interpreting the results
-After execution, the simulation prints:
-
-pgsql
-Copy code
+```
 Server concurrency simulation complete.
 Rides requested (concurrently): 20
 Success: 19
@@ -130,30 +110,21 @@ min	Fastest transaction
 max	Slowest (often waiting on locks)
 avg	Average transaction time
 Total wall-clock time	Time for the entire concurrent batch (not per-ride)
+```
 
-If concurrency is real, the total time will be close to the slowest transaction, not N × avg.
+Interpretation of each field:
 
-🧠 Viewing concurrency in the SQL logs
-After running a concurrency simulation:
+- **Rides requested (concurrently)** – Number of parallel `/api/book` transactions launched.
+- **Success** – Transactions that committed successfully (ride + payment recorded).
+- **Failed** – Requests that returned an error or rolled back (often due to simulated constraints or lock timeouts).
+- **Transaction time (min / max / avg)** – Per-transaction durations; high `max` values usually indicate lock waits or queueing.
+- **Total wall-clock time** – Duration of the entire batch. When concurrency is real, this should be close to the slowest transaction time rather than `N × avg`.
 
-Go to Admin tab
+### Viewing concurrency in the SQL logs
+1. Open the **Admin** tab after running a simulation.
+2. Download **transaction.sql** or **query.sql** to view every statement executed.
+3. Look for interleaved `BEGIN`, `SELECT ... FOR UPDATE`, and `UPDATE` statements from multiple rides — this shows overlapping transactions and lock ordering in action.
 
-Click Download transaction.sql or Download query.sql
-
-Inside those files, you will see interleaved SQL from overlapping transactions, for example:
-
-sql
-Copy code
-BEGIN
-SELECT ... FOR UPDATE
-UPDATE DRIVER ...
-COMMIT
-
-BEGIN
-SELECT ... FOR UPDATE
-UPDATE PAYMENT ...
-COMMIT
-This is direct evidence of concurrency and lock ordering.
 
 📍 Lookup (Protected) Tables
 These tables are not truncated when clicking Delete Rows (Danger):
@@ -176,20 +147,6 @@ All admin operations use explicit BEGIN and COMMIT
 
 Concurrency simulator intentionally stresses driver/payment locking
 
-📦 Submission Checklist
-Requirement	Status
-ER diagram	✔
-Schema / Create Tables	✔
-Seed data	✔
-Multi-table booking transaction	✔
-Simulation	✔
-Concurrency & timing statistics	✔
-SQL trace export	✔
-Admin panel	✔
-README + demo video	✔
-
-🎥 Demo Video
-Add your Google Drive / YouTube link here.
 
 📜 License
 Educational coursework — not for production deployment.
