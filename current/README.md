@@ -1,146 +1,199 @@
-# Ride-Share Database Application
+# Ride-Share Database Web Application
 
-A full-stack PostgreSQL + Express + Vanilla JS project that demonstrates transactional logic, query analytics, and administrative operations for a ride-share platform.
-Built for the **HW-DBApp** assignment (Phases 1 & 2).
+A full-stack PostgreSQL + Express + JavaScript application that demonstrates relational schema design, multi-table transactions, trace logging, analytics, and database concurrency.
 
----
-
-## 🚀 Features
-
-### Phase 1 — Database + App Integration
-
-* **Relational schema** covering users, drivers, rides, pricing, payments, and accounts
-* **Real transaction**: booking and payment capture update multiple tables atomically
-* **JOIN / GROUP BY reports** for rides, commission, and payouts
-* **Simulation**: one-click ride booking to populate realistic data
-* **Admin panel**:
-
-  * Create tables from `schema.sql`
-  * Initialize lookup and demo data from `seed.sql`
-  * Browse first 10 rows of any table
-  * Truncate non-lookup tables
-  * Download generated `transaction.sql` and `query.sql` trace files
-* **Trace logging** automatically captures every executed SQL statement
-
-### Phase 2 — Performance & Concurrency
-
-* Concurrent transaction simulation
-* Transaction time display
-* Create demo video
-* Write report
+The app makes core database systems concepts **visible and interactive** — users can create tables, seed data, book rides, run concurrent transactions, and inspect SQL traces.
 
 ---
 
-## 🗂️ Project Structure
+## 🚀 Overview
 
-```
-├── server.js         # Express backend + admin routes + SQL tracing
-├── pool.js           # PostgreSQL pool connection
-├── app.js            # Front-end logic / API calls
-├── index.html        # UI for simulation, reports, and admin
-├── styles.css        # Minimal Tailwind-style look
-├── schema.sql        # All CREATE TABLE / DDL
-├── seed.sql          # Demo data and lookup inserts
-├── README.md         # You are here
-└── ER_diagram.pdf    # Our server model
-```
+This project implements the logic of a ride-share platform, focusing on:
+
+- Data modeling
+- Transactional ride booking with atomic updates
+- Locking / isolation during concurrency
+- Post-transaction financial and ride records
+- SQL trace visibility
+- Reporting and analytics
+
+Everything is accessible interactively through a web UI.
 
 ---
 
-## ⚙️ Setup & Run
+## 🗂 Project Structure
 
-### 1️⃣  Install dependencies
+├── server.js # Express API, admin panel, SQL tracing, concurrency handling
+├── pool.js # PostgreSQL connection
+├── app.js # Front-end fetch API, simulation logic, UI interactions
+├── index.html # UI for simulation, admin, and reports
+├── styles.css # Styling
+├── schema.sql # CREATE TABLE definitions
+├── seed.sql # Lookup/demo data population
+├── README.md # Documentation
+└── ER_diagram.pdf # Entity Relationship diagram
 
+yaml
+Copy code
+
+---
+
+## ⚙ Setup
+
+### 1️⃣ Install dependencies
 ```bash
 npm install express pg
-```
-
-### 2️⃣  Configure your database
-
-Set a local Postgres connection string via the pool.js file and change the values for your database:
-
-EX:
-```
+2️⃣ Configure PostgreSQL (edit pool.js)
+ini
+Copy code
 PGHOST=localhost
 PGUSER=postgres
 PGPASSWORD=yourpassword
 PGDATABASE=ridedb
 PGPORT=5432
-```
-
-### 3️⃣  Start the server
-
-```bash
+3️⃣ Start the server
+bash
+Copy code
 node server.js
-```
+Then open:
+➡ http://localhost:3000
 
-Visit **[http://localhost:3000](http://localhost:3000)**
+🧩 Admin Panel (bottom of page)
+Action	Description
+Create Tables	Executes schema.sql
+Initialize Lookups	Executes seed.sql
+Delete Rows (Danger)	Truncates non-lookup tables
+Browse 10	Shows first 10 rows of selected table
+Download transaction.sql	Every SQL statement that occurs inside a transaction
+Download query.sql	Every SQL statement executed (all queries)
+Clear Traces	Reset SQL logs
+README	Opens this file
+Demo Video	Displays linked video demo
 
----
+📊 Simulation Features
+Click Simulate Ride on the home page.
 
-## 🧩 Admin Panel Guide
+Mode	Where it runs	Behavior	Use case
+Local Simulation	Browser only	1 booking at a time	Quick correctness demo
+Server Simulation	Backend	N concurrent bookings	Shows transaction & lock behavior
 
-Accessible at the bottom of the home page.
+⚡ Concurrency Simulation (Phase-2 Requirement)
+The concurrency simulator is a central educational feature.
 
-| Button                                   | Purpose                                               |
-| ---------------------------------------- | ----------------------------------------------------- |
-| **Create Tables**                        | Executes `schema.sql` to (re)create all DB objects    |
-| **Initialize Lookups**                   | Executes `seed.sql` to populate reference + demo data |
-| **Delete Rows (Danger)**                 | Truncates all non-lookup tables                       |
-| **Browse 10**                            | Displays the first 10 rows of the selected table      |
-| **Download transaction.sql / query.sql** | Exports all executed SQL statements                   |
-| **Clear Traces**                         | Empties the trace buffers                             |
-| **README file**                          | Opens the README.md file to view                      |
-| **Demo video**                           | Link to the youtube demo for the webapp               |
+How to run it
+Create Tables
 
----
+Initialize Lookups
 
-## 📊 Simulation & Reports
+Scroll to Simulation section → Simulate Ride
 
-* **Simulate Ride**: inserts random rides and payments (multi-table transaction)
-* **Reports**: run predefined SQL queries (joins, group-bys) to analyze commissions, driver stats, and payouts
-* **Output**: visible in the results panel and recorded in `query.sql`
+When prompted, type:
+server
 
----
+Enter number of concurrent rides (e.g., 20)
 
-## 🧱 Lookup Tables (Protected from Truncate)
+The frontend triggers runServerSimulation() → which:
 
-```
+prepares random booking payloads
+
+defines fireOneRide() → POSTS /api/book
+
+launches N bookings in parallel:
+
+js
+Copy code
+await Promise.all(
+  Array.from({ length: N }, () => fireOneRide())
+);
+This sends N concurrent transactions to PostgreSQL, exercising locking and isolation.
+
+🔍 Interpreting the results
+After execution, the simulation prints:
+
+pgsql
+Copy code
+Server concurrency simulation complete.
+Rides requested (concurrently): 20
+Success: 19
+Failed: 1
+
+Transaction time (ms):
+  min = 37.88
+  max = 128.20
+  avg = 66.15
+Total wall-clock time (ms): 452.91
+Value	Meaning
+Rides requested (concurrently)	N parallel transactions launched
+Success	Committed booking/payment transactions
+Failed	Errors returned by the API or transaction rollback
+min	Fastest transaction
+max	Slowest (often waiting on locks)
+avg	Average transaction time
+Total wall-clock time	Time for the entire concurrent batch (not per-ride)
+
+If concurrency is real, the total time will be close to the slowest transaction, not N × avg.
+
+🧠 Viewing concurrency in the SQL logs
+After running a concurrency simulation:
+
+Go to Admin tab
+
+Click Download transaction.sql or Download query.sql
+
+Inside those files, you will see interleaved SQL from overlapping transactions, for example:
+
+sql
+Copy code
+BEGIN
+SELECT ... FOR UPDATE
+UPDATE DRIVER ...
+COMMIT
+
+BEGIN
+SELECT ... FOR UPDATE
+UPDATE PAYMENT ...
+COMMIT
+This is direct evidence of concurrency and lock ordering.
+
+📍 Lookup (Protected) Tables
+These tables are not truncated when clicking Delete Rows (Danger):
+
+objectivec
+Copy code
 CATEGORY
 APP_CONFIG
 LOCATION
-```
+🧑‍💻 Technical Notes
+Node 18+
 
----
+PostgreSQL 15+
 
-## 🧑‍💻 Development Notes
+SQL tracing implemented by wrapping pool.query()
 
-* **Node version**: ≥ 18
-* **Database**: PostgreSQL 15+
-* SQL tracing is applied globally by patching `pool.query()` in `server.js`
-* All admin operations wrap statements in `BEGIN … COMMIT` for safety
+All admin operations use explicit BEGIN and COMMIT
 
----
+/api/book implements multi-table atomic transaction
 
-## 🧾 Submission Checklist
+Concurrency simulator intentionally stresses driver/payment locking
 
-* [x] ER Model (external PDF)
-* [x] Working schema + transactions
-* [x] Simulation and reports
-* [x] Admin panel (create/init/truncate/browse)
-* [x] Trace files generated
-* [x] README + demo video link
+📦 Submission Checklist
+Requirement	Status
+ER diagram	✔
+Schema / Create Tables	✔
+Seed data	✔
+Multi-table booking transaction	✔
+Simulation	✔
+Concurrency & timing statistics	✔
+SQL trace export	✔
+Admin panel	✔
+README + demo video	✔
 
----
+🎥 Demo Video
+Add your Google Drive / YouTube link here.
 
-## 🎥 Demo Video & Links
-
-* **Demo video:** [Add YouTube or Drive link here]
-* **ER diagram:** [Open the ER diagram](ER_diagram.pdf)
-
----
-
-## 📜 License
-
-Educational use only — not for production.
+📜 License
+Educational coursework — not for production deployment.
 © 2025 Ride-Share DB App Project.
+
+yaml
+Copy code

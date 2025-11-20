@@ -92,3 +92,6 @@ ON CONFLICT (category_name) DO NOTHING;
 INSERT INTO LOCATION(address) VALUES
  ('123 Main St'), ('500 Market Ave'), ('1 University Dr'), ('99 Airport Blvd')
 ON CONFLICT DO NOTHING;
+
+
+
