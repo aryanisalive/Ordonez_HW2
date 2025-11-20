@@ -54,7 +54,7 @@ npm install express pg
 
 ### 2️⃣  Configure your database
 
-Set a local Postgres connection string via environment variable (e.g. `.env`):
+Set a local Postgres connection string directly in pool.js:
 
 ```
 PGHOST=localhost
