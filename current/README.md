@@ -40,8 +40,8 @@ Copy code
 
 ## ⚙ Setup
 
-1️⃣ Install dependencies
 ```bash
+1️⃣ Install dependencies
 npm install express pg
 2️⃣ Configure PostgreSQL (edit pool.js)
 ini
