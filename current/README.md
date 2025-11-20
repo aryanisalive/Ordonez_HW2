@@ -5,29 +5,22 @@ Built for the **HW-DBApp** assignment (Phases 1 & 2).
 
 ---
 
-## 🚀 Features
+## 🚀 Overview
 
-### Phase 1 — Database + App Integration
+This app implements the backend logic of a ride-share platform together with a front-end UI that exposes the core concepts of **relational schema design**, **multi-table atomic transactions**, **logging**, and **concurrency**.
 
-* **Relational schema** covering users, drivers, rides, pricing, payments, and accounts
-* **Real transaction**: booking and payment capture update multiple tables atomically
-* **JOIN / GROUP BY reports** for rides, commission, and payouts
-* **Simulation**: one-click ride booking to populate realistic data
-* **Admin panel**:
+Users (or TAs) can:
 
-  * Create tables from `schema.sql`
-  * Initialize lookup and demo data from `seed.sql`
-  * Browse first 10 rows of any table
-  * Truncate non-lookup tables
-  * Download generated `transaction.sql` and `query.sql` trace files
-* **Trace logging** automatically captures every executed SQL statement
-
-### Phase 2 — Performance & Concurrency (in progress)
-
-* Planned: concurrent transaction simulation with timing metrics (ms)
-* Planned: “100 customers / hour” batch scenario
+- create database tables
+- seed lookup/demo data
+- simulate rides
+- run concurrent transactions
+- browse data
+- export SQL traces
+- observe lock behavior and timing statistics
 
 ---
+
 
 ## 🗂️ Project Structure
 
@@ -74,45 +67,88 @@ Visit **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 🧩 Admin Panel Guide
+## 🧩 Admin Panel (Bottom of page)
 
-Accessible at the bottom of the home page.
-
-| Button                                   | Purpose                                               |
-| ---------------------------------------- | ----------------------------------------------------- |
-| **Create Tables**                        | Executes `schema.sql` to (re)create all DB objects    |
-| **Initialize Lookups**                   | Executes `seed.sql` to populate reference + demo data |
-| **Delete Rows (Danger)**                 | Truncates all non-lookup tables                       |
-| **Browse 10**                            | Displays the first 10 rows of the selected table      |
-| **Download transaction.sql / query.sql** | Exports all executed SQL statements                   |
-| **Clear Traces**                         | Empties the trace buffers                             |
-
----
-
-## 📊 Simulation & Reports
-
-* **Simulate Ride**: inserts random rides and payments (multi-table transaction)
-* **Reports**: run predefined SQL queries (joins, group-bys) to analyze commissions, driver stats, and payouts
-* **Output**: visible in the results panel and recorded in `query.sql`
+| Button | Action |
+|--------|--------|
+| **Create Tables** | Runs `schema.sql` |
+| **Initialize Lookups** | Runs `seed.sql` |
+| **Delete Rows (Danger)** | Truncates application tables (not lookup tables) |
+| **Browse 10** | Shows first 10 rows of selected table |
+| **Download transaction.sql** | Exports all SQL inside `BEGIN`/`COMMIT` blocks |
+| **Download query.sql** | Exports every executed SQL |
+| **Clear Traces** | Clears log buffers |
+| **README** | Opens this file |
+| **Demo Video** | User-supplied link |
 
 ---
 
-## 🧱 Lookup Tables (Protected from Truncate)
+---
 
+## 📊 Simulation Modes
+
+Click **Simulate Ride** at the top of the UI.
+
+| Mode | Runs in… | How many transactions | Purpose |
+|------|----------|-----------------------|---------|
+| **Local Simulation** | Browser only | 1 at a time | Quick test of booking |
+| **Server Simulation** | Backend | N in **parallel** | Demonstrate concurrency |
+
+---
+
+## ⚡ Concurrency Demonstration (Main Phase-2 Feature)
+
+Server-mode simulation uses true concurrency to show how database locking and transaction time are affected under load.
+
+### How to run it
+
+1. **Create Tables**
+2. **Initialize Lookups**
+3. Click **Simulate Ride**
+4. Type `server` when asked for simulation mode
+5. Enter # of rides (e.g., `20`)
+
+The frontend then calls `runServerSimulation()` which:
+
+- fetches available drivers
+- generates N random booking payloads
+- defines an internal function `fireOneRide()` that POSTs `/api/book`
+- launches **N copies of `fireOneRide()` in parallel**:
+
+```js
+await Promise.all(
+  Array.from({ length: N }, () => fireOneRide())
+);
 ```
-CATEGORY
-APP_CONFIG
-LOCATION
-```
-
 ---
 
-## 🧪 Phase 2 Planned Extensions
+## 🧠 Interpreting the Results
+When the batch completes, the app displays a report similar to:
+```
+Server concurrency simulation complete.
+Rides requested (concurrently): 20
+Success: 19
+Failed: 1
 
-* Concurrent transaction demo (`Promise.all` bookings)
-* Transaction-time measurement (avg/p95/max)
-* “100 Customers / Hour” simulation preset
-* Additional dashboards for throughput & latency
+Transaction time (ms):
+  min = 37.88
+  max = 128.20
+  avg = 66.15
+Total wall-clock time (ms): 452.91
+```
+
+Meaning of each value:
+
+Rides requested (concurrently):	Number of parallel transactions launched
+Success:	Successful commit of a full booking/payment transaction
+Failed:	Request returned non-200 or { ok:false }
+min:	Fastest single transaction duration
+max:	Slowest transaction — often blocked by locks
+avg:	Average duration across successes
+Total wall-clock time:	Time for the entire batch, not per transaction
+
+If concurrency is real, total time is close to the slowest transaction, rather than N × avg, showing parallel execution.
+
 
 ---
 
@@ -122,24 +158,6 @@ LOCATION
 * **Database**: PostgreSQL 15+
 * SQL tracing is applied globally by patching `pool.query()` in `server.js`
 * All admin operations wrap statements in `BEGIN … COMMIT` for safety
-
----
-
-## 🧾 Submission Checklist
-
-* [x] ER Model (external PDF)
-* [x] Working schema + transactions
-* [x] Simulation and reports
-* [x] Admin panel (create/init/truncate/browse)
-* [x] Trace files generated
-* [ ] README + demo video link (add below)
-
----
-
-## 🎥 Demo Video & Links
-
-* **Demo video:** [Add YouTube or Drive link here]
-* **ER diagram:** [Add link to ERD PDF here]
 
 ---
 
