@@ -1067,13 +1067,19 @@ async function runServerSimulation(){
     const numRides = prompt("Enter number of rides to simulate on the server (1-50):", "10");
     if (numRides === null) return;
     const N = Number(numRides);
-    if (isNaN(N) || N < 1 || N > 50) { alert("Please enter a number between 1 and 50."); return; }
+    if (isNaN(N) || N < 1 || N > 50) {
+      alert("Please enter a number between 1 and 50.");
+      return;
+    }
 
     // Fetch available drivers
     const drvRes = await fetch("/api/drivers/available");
-    if(!drvRes.ok){ alert("Failed to load drivers"); return; }
+    if (!drvRes.ok) {
+      alert("Failed to load drivers");
+      return;
+    }
     const drivers = await drvRes.json();
-    if(!Array.isArray(drivers) || drivers.length === 0){
+    if (!Array.isArray(drivers) || drivers.length === 0) {
       alert("No available drivers found. Please add drivers or mark some as available.");
       return;
     }
@@ -1085,6 +1091,7 @@ async function runServerSimulation(){
       "950 Lakeview Dr", "77 Sunset Way", "1200 River Rd", "18 Maple Ln", "45 Broadway"
     ];
     const cities = ["Springfield","Hill Valley","Sunnydale","River City","Fairview"];
+
     function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
     function randomAddress(){ return `${rand(streets)}, ${rand(cities)}`; }
     function randomName(){ return `User ${Math.floor(100000 + Math.random()*900000)}`; }
@@ -1099,7 +1106,8 @@ async function runServerSimulation(){
     let ok = 0, fail = 0;
     const durations = [];
 
-    for (let i=0;i<N;i++){
+    // 🔹 One booking task (used concurrently)
+    async function fireOneRide() {
       const d = rand(drivers);
       const payload = {
         userName: randomName(),
@@ -1111,46 +1119,65 @@ async function runServerSimulation(){
         rideTime: randomTime(),
         basePrice: randomBase()
       };
-      
-      const tStart = performance.now()
-      try{
+
+      const tStart = performance.now();
+      try {
         const r = await fetch("/api/book", {
           method: "POST",
           headers: {"Content-Type":"application/json"},
           body: JSON.stringify(payload)
         });
-        const tEnd = performance.now()
-        if(!r.ok){
+        const tEnd = performance.now();
+
+        if (!r.ok) {
           fail++;
-        }else{
-          const j = await r.json();
-          if (j && j.ok){
-            ok++;
-            const dur = typeof j.duration_ms === "number"
-              ? j.duration_ms
-              : (tEnd - tStart);
-            durations.push(dur);
-          }  
-          else {
-            fail++;
-          }
+          return;
         }
-      }catch(e){
+        const j = await r.json();
+        if (j && j.ok) {
+          ok++;
+          const dur = typeof j.duration_ms === "number"
+            ? j.duration_ms
+            : (tEnd - tStart);
+          durations.push(dur);
+        } else {
+          fail++;
+        }
+      } catch (e) {
         fail++;
       }
     }
 
+    // 🔹 Actual concurrency: N rides fired in parallel
+    const t0 = performance.now();
+    await Promise.all(
+      Array.from({ length: N }, () => fireOneRide())
+    );
+    const t1 = performance.now();
+
     let stats = "";
-    if (durations.length > 0){
+    if (durations.length > 0) {
       const min = Math.min(...durations);
       const max = Math.max(...durations);
       const avg = durations.reduce((s,x)=>s+x,0) / durations.length;
-      stats = `\n\nTransation time (ms): \n min = ${min.toFixed(2)}\n max = ${max.toFixed(2)}\n avg = ${avg.toFixed(2)}`;
-      console.log("Transaction duration (ms):", durations);
+      stats =
+        `\n\nTransaction time (ms):` +
+        `\n  min = ${min.toFixed(2)}` +
+        `\n  max = ${max.toFixed(2)}` +
+        `\n  avg = ${avg.toFixed(2)}` +
+        `\nTotal wall-clock time (ms): ${(t1 - t0).toFixed(2)}`;
+      console.log("Per-transaction durations (ms):", durations);
     }
-    alert(`Server simulation complete.\nSuccess: ${ok}\nFailed: ${fail}`);
-    // Optionally refresh any client tables that read from the server (if present in UI)
-  }catch(e){
+
+    alert(
+      `Server concurrency simulation complete.` +
+      `\nRides requested (concurrently): ${N}` +
+      `\nSuccess: ${ok}` +
+      `\nFailed: ${fail}` +
+      stats
+    );
+  } catch(e) {
     alert("Simulation failed: " + e.message);
   }
 }
+
